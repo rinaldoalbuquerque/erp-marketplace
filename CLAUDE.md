@@ -68,7 +68,22 @@ ERP para gerenciar anúncios, estoque e pedidos em marketplaces.
 
 ## Comandos
 
-(Preencher após criar o projeto: instalar, rodar em desenvolvimento, lint, typecheck, testes, migrations.)
+| Comando | O que faz |
+|---|---|
+| `npm install` | Instala dependências (e gera o cliente do Prisma) |
+| `npm run dev` | Roda em desenvolvimento (http://localhost:3000) |
+| `npm run check` | **Rodar antes de cada commit:** lint + typecheck + formatação + testes |
+| `npm run lint` / `npm run typecheck` / `npm test` | Cada verificação separada |
+| `npm run format` | Formata o código com Prettier |
+| `npm run db:migrate` | Cria/aplica migration (`npx prisma migrate dev --create-only --name x` para revisar o SQL antes) |
+| `npm run db:generate` | Regenera o cliente do Prisma |
+| `npm run db:studio` | Abre o Prisma Studio para ver os dados |
+
+Notas técnicas:
+- Versões: Next.js 16 (veja `AGENTS.md`: ler `node_modules/next/dist/docs/` antes de usar APIs do Next), Prisma 7 (config em `prisma.config.ts`, cliente gerado em `src/generated/prisma`, adaptador `@prisma/adapter-pg`), Zod 4, Vitest 5.
+- `DATABASE_URL` (pooler, porta 6543) é usado pelo app; `DIRECT_URL` (porta 5432) pelas migrations.
+- Toda tabela nova no schema `public` precisa de `ENABLE ROW LEVEL SECURITY` na migration (sem policies), para o navegador não acessar via Data API do Supabase.
+- Variáveis de ambiente validadas em `src/server/env.ts`; código só do servidor usa `import "server-only"`.
 
 ## Estrutura de pastas (alvo)
 

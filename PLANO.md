@@ -86,15 +86,15 @@ ERP para gerenciar marketplaces, começando pelo Mercado Livre, com foco em **pr
 ## 5. Fases
 
 ### Fase 0 — Preparação
-- [ ] Instalar Node.js (LTS), Git, VS Code e a extensão do Claude Code
-- [ ] Criar repositório no GitHub
-- [ ] Criar projeto no Supabase
+- [x] Instalar Node.js (LTS), Git, VS Code e a extensão do Claude Code
+- [x] Criar repositório no GitHub
+- [x] Criar projeto no Supabase
 - [ ] Criar conta de desenvolvedor no Mercado Livre e registrar uma aplicação; criar usuários de teste
 - [ ] Definir provedor de e-mail com domínio próprio (necessário antes de uso real da confirmação por e-mail)
 
 ### Fase 1 — Fundação
-- [ ] Projeto Next.js + TypeScript, lint, typecheck, testes
-- [ ] Prisma + migrations; schema inicial
+- [x] Projeto Next.js + TypeScript, lint, typecheck, testes
+- [x] Prisma + migrations; schema inicial
 - [ ] Autenticação (seção 3.1) e organização automática no cadastro
 - [ ] Perfis de acesso e camada de dados filtrando por organização
 - [ ] Layout base e menu lateral
