@@ -1,0 +1,11 @@
+// Prisma schema. Database changes ONLY through migrations (`npm run db:migrate`).
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
