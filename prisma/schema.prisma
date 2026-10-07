@@ -9,3 +9,55 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum MembershipRole {
+  owner
+  admin
+  operator
+
+  @@map("membership_role")
+}
+
+/// Tenant. Every business table has an organization_id pointing here.
+model Organization {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  memberships Membership[]
+
+  @@map("organizations")
+}
+
+/// User profile. id is the Supabase Auth user id (auth.users.id).
+model Profile {
+  id              String    @id @db.Uuid
+  fullName        String    @map("full_name")
+  /// E.164 format, e.g. +5511999999999
+  phone           String?
+  termsAcceptedAt DateTime? @map("terms_accepted_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  memberships Membership[]
+
+  @@map("profiles")
+}
+
+/// Which users belong to which organization, and with which role.
+model Membership {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  userId         String         @map("user_id") @db.Uuid
+  role           MembershipRole
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         Profile      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@map("memberships")
+}
