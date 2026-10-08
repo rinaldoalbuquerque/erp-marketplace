@@ -25,10 +25,11 @@ model Organization {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  memberships    Membership[]
-  products       Product[]
-  skus           Sku[]
-  stockMovements StockMovement[]
+  memberships         Membership[]
+  products            Product[]
+  skus                Sku[]
+  stockMovements      StockMovement[]
+  marketplaceAccounts MarketplaceAccount[]
 
   @@map("organizations")
 }
@@ -43,8 +44,9 @@ model Profile {
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  memberships    Membership[]
-  stockMovements StockMovement[]
+  memberships         Membership[]
+  stockMovements      StockMovement[]
+  marketplaceAccounts MarketplaceAccount[]
 
   @@map("profiles")
 }
@@ -179,4 +181,68 @@ model StockMovement {
   @@unique([organizationId, idempotencyKey])
   @@index([skuId, createdAt])
   @@map("stock_movements")
+}
+
+enum Marketplace {
+  mercadolivre
+
+  @@map("marketplace")
+}
+
+/// Listing format used by a marketplace account (Mercado Livre: traditional vs User Products).
+enum ListingModel {
+  traditional
+  user_products
+  unknown
+
+  @@map("listing_model")
+}
+
+enum MarketplaceAccountStatus {
+  active
+  /// The marketplace invalidated the authorization: the owner must reconnect.
+  needs_reauth
+  /// Disconnected by the user (tokens erased; row kept for history).
+  disconnected
+
+  @@map("marketplace_account_status")
+}
+
+/// A seller account connected to the ERP. Unlimited per organization, each one
+/// with its own credentials and sync state (CLAUDE.md).
+model MarketplaceAccount {
+  id             String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String                   @map("organization_id") @db.Uuid
+  marketplace    Marketplace
+  /// Seller id in the marketplace (Mercado Livre user_id), stored as text.
+  externalUserId String                   @map("external_user_id")
+  nickname       String
+  siteId         String?                  @map("site_id")
+  listingModel   ListingModel             @default(unknown) @map("listing_model")
+  status         MarketplaceAccountStatus @default(active)
+
+  /// AES-256-GCM encrypted (src/server/crypto). Never logged or shown.
+  accessTokenEncrypted  String?   @map("access_token_encrypted")
+  refreshTokenEncrypted String?   @map("refresh_token_encrypted")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamptz(6)
+  scopes                String?
+  lastTokenRefreshAt    DateTime? @map("last_token_refresh_at") @db.Timestamptz(6)
+
+  /// Last successful data sync (Phase 2A)
+  lastSyncAt    DateTime? @map("last_sync_at") @db.Timestamptz(6)
+  /// Last error shown to the owner (no secrets)
+  lastError     String?   @map("last_error")
+  connectedById String?   @map("connected_by_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connectedBy  Profile?     @relation(fields: [connectedById], references: [id], onDelete: SetNull)
+
+  /// One marketplace account belongs to a single organization (SaaS-safe).
+  @@unique([marketplace, externalUserId])
+  @@unique([organizationId, id])
+  @@index([organizationId])
+  @@map("marketplace_accounts")
 }

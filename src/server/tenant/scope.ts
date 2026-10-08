@@ -10,6 +10,7 @@
  * against prisma/schema.prisma, so a new business table can't be forgotten.
  */
 export const TENANT_MODELS: ReadonlySet<string> = new Set([
+  "MarketplaceAccount",
   "Membership",
   "Product",
   "Sku",
