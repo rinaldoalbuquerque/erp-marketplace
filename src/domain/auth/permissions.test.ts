@@ -15,6 +15,8 @@ const MATRIX: Record<Permission, Record<Role, boolean>> = {
   "listings.view": { owner: true, admin: true, operator: true },
   "listings.edit": { owner: true, admin: true, operator: true },
   "listings.delete": { owner: true, admin: true, operator: false },
+  "products.edit": { owner: true, admin: true, operator: true },
+  "products.archive": { owner: true, admin: true, operator: false },
   "stock.view": { owner: true, admin: true, operator: true },
   "stock.adjust": { owner: true, admin: true, operator: true },
   "orders.view": { owner: true, admin: true, operator: true },

@@ -15,6 +15,8 @@ export const PERMISSIONS = [
   "listings.view",
   "listings.edit", // create, edit, replicate listings
   "listings.delete",
+  "products.edit", // create/edit products and SKUs (cost field needs financial.view)
+  "products.archive",
   "stock.view",
   "stock.adjust",
   "orders.view",
@@ -30,6 +32,7 @@ export type Permission = (typeof PERMISSIONS)[number];
 const OPERATOR: readonly Permission[] = [
   "listings.view",
   "listings.edit",
+  "products.edit",
   "stock.view",
   "stock.adjust",
   "orders.view",
@@ -40,6 +43,7 @@ const OPERATOR: readonly Permission[] = [
 const ADMIN: readonly Permission[] = [
   ...OPERATOR,
   "listings.delete",
+  "products.archive",
   "financial.view",
   "marketplaceAccounts.manage",
   "members.manage",
