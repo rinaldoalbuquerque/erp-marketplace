@@ -19,10 +19,14 @@ import { getAuthUser } from "@/server/auth/session";
 import { env } from "@/server/env";
 import { createSupabaseServerClient } from "@/server/supabase";
 
+import type { ConfirmFlow } from "@/lib/auth/confirm-params";
+
 // Server Actions are public endpoints: each one validates its input on the
 // server, regardless of what the form in the browser already checked.
 
-const confirmUrl = () => `${env.NEXT_PUBLIC_SITE_URL}${ROUTES.emailConfirm}`;
+/** Where Supabase e-mail links return to (Supabase appends ?code=...). */
+const confirmUrl = (flow: ConfirmFlow) =>
+  `${env.NEXT_PUBLIC_SITE_URL}${ROUTES.emailConfirm}?flow=${flow}`;
 
 /** Server-side password checks shared by sign-up and password reset. */
 async function passwordProblem(password: string, userInputs: string[]): Promise<string | null> {
@@ -62,7 +66,7 @@ export async function signupAction(_prev: FormState, formData: FormData): Promis
     email: input.email,
     password: input.password,
     options: {
-      emailRedirectTo: confirmUrl(),
+      emailRedirectTo: confirmUrl("signup"),
       // Read back (and validated again) when the e-mail is confirmed.
       data: {
         full_name: input.fullName,
@@ -94,7 +98,7 @@ export async function resendConfirmationAction(
   const { error } = await supabase.auth.resend({
     type: "signup",
     email: parsed.data.email,
-    options: { emailRedirectTo: confirmUrl() },
+    options: { emailRedirectTo: confirmUrl("signup") },
   });
   if (error?.code === "over_email_send_rate_limit" || error?.code === "over_request_rate_limit") {
     return { status: "error", message: authErrorMessage(error.code), values: raw };
@@ -168,7 +172,7 @@ export async function forgotPasswordAction(
 
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-    redirectTo: confirmUrl(),
+    redirectTo: confirmUrl("recovery"),
   });
   if (error?.code === "over_email_send_rate_limit" || error?.code === "over_request_rate_limit") {
     return { status: "error", message: authErrorMessage(error.code), values: raw };

@@ -13,6 +13,9 @@ export const metadata: Metadata = { title: "Entrar" };
 const NOTICES: Record<string, string> = {
   "link-invalido": LINK_INVALID,
   "tente-novamente": GENERIC_ERROR,
+  // Confirmation link opened in another browser (PKCE): logging in finishes the setup.
+  "entre-para-continuar":
+    "Se você acabou de confirmar seu e-mail, entre com seu e-mail e senha para continuar.",
 };
 
 export default function LoginPage({ searchParams }: PageProps<"/entrar">) {

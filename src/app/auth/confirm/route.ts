@@ -1,40 +1,43 @@
-import type { EmailOtpType } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { parseConfirmParams } from "@/lib/auth/confirm-params";
 import { ROUTES } from "@/lib/auth/routes";
 import { provisionUserInDatabase } from "@/server/auth/provisioning-store";
 import { env } from "@/server/env";
 import { createSupabaseServerClient } from "@/server/supabase";
 
 // Handles the links in Supabase e-mails (sign-up confirmation and password reset).
-// The e-mail templates must point here:
-//   {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email     (Confirm signup)
-//   {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery  (Reset password)
+// Accepts both link formats, see src/lib/auth/confirm-params.ts:
+// - default templates: ?flow=signup|recovery&code=...   (PKCE, current setup)
+// - custom templates:  ?token_hash=...&type=email|recovery  (needs custom SMTP)
 // Based on: https://supabase.com/docs/guides/auth/server-side/nextjs
-// and https://github.com/supabase/supabase/blob/master/examples/user-management/nextjs-user-management/app/auth/confirm/route.ts
-
-const ALLOWED_TYPES = new Set<EmailOtpType>(["email", "signup", "recovery"]);
+// and https://supabase.com/docs/guides/auth/sessions/pkce-flow
 
 export async function GET(request: NextRequest) {
-  const tokenHash = request.nextUrl.searchParams.get("token_hash");
-  const type = request.nextUrl.searchParams.get("type") as EmailOtpType | null;
-
-  // Redirect URLs never carry the token (keeps it out of history and logs).
+  // Redirect URLs never carry the token/code (keeps them out of history and logs).
   const go = (path: string) => NextResponse.redirect(new URL(path, request.url));
   const invalidLink = () => go(`${ROUTES.login}?erro=link-invalido`);
 
-  if (!tokenHash || !type || !ALLOWED_TYPES.has(type)) {
-    return invalidLink();
-  }
+  const confirm = parseConfirmParams(request.nextUrl.searchParams);
+  if (confirm.kind === "invalid") return invalidLink();
 
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
+  const { data, error } =
+    confirm.kind === "code"
+      ? await supabase.auth.exchangeCodeForSession(confirm.code)
+      : await supabase.auth.verifyOtp({ type: confirm.type, token_hash: confirm.tokenHash });
+
   if (error || !data.user) {
+    // PKCE codes only work in the browser where sign-up/reset started.
+    // For sign-up, logging in completes the setup (provisioning runs on login).
+    if (confirm.kind === "code" && confirm.flow === "signup") {
+      return go(`${ROUTES.login}?erro=entre-para-continuar`);
+    }
     return invalidLink();
   }
 
-  if (type === "recovery") {
-    // The user now has a short session that allows changing the password.
+  if (confirm.flow === "recovery") {
+    // The user now has a session that allows changing the password.
     return go(ROUTES.resetPassword);
   }
 
