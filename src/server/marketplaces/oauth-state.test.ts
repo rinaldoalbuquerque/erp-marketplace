@@ -69,7 +69,12 @@ describe("OAuth state cookie", () => {
 
   it("rejects a tampered cookie or another key", () => {
     const sealed = sealOAuthState(base, key, now);
-    expect(openOAuthState(`${sealed}x`, callback, key, now)).toEqual({
+    // Flip one character in the middle of the payload (a trailing extra
+    // character would just be ignored by base64url decoding).
+    const middle = Math.floor(sealed.length / 2);
+    const flipped = sealed[middle] === "A" ? "B" : "A";
+    const tampered = sealed.slice(0, middle) + flipped + sealed.slice(middle + 1);
+    expect(openOAuthState(tampered, callback, key, now)).toEqual({
       ok: false,
       reason: "invalid",
     });
