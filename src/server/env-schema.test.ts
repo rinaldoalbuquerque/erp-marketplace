@@ -7,11 +7,12 @@ const valid = {
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_test",
   SUPABASE_SECRET_KEY: "sb_secret_test",
   DATABASE_URL: "postgresql://user:pass@localhost:6543/postgres",
+  NEXT_PUBLIC_SITE_URL: "http://localhost:3000",
 };
 
 describe("parseServerEnv", () => {
   it("accepts a complete environment", () => {
-    expect(parseServerEnv(valid)).toEqual(valid);
+    expect(parseServerEnv(valid)).toEqual({ ...valid, ALLOW_PUBLIC_SIGNUP: false });
   });
 
   it("lists missing variable names", () => {
@@ -25,5 +26,24 @@ describe("parseServerEnv", () => {
     expect(() =>
       parseServerEnv({ ...valid, SUPABASE_SECRET_KEY: secret, DATABASE_URL: "not-a-url" }),
     ).toThrow(expect.objectContaining({ message: expect.not.stringContaining(secret) }));
+  });
+
+  it("removes a trailing slash from the site URL", () => {
+    const env = parseServerEnv({ ...valid, NEXT_PUBLIC_SITE_URL: "https://erp.exemplo.com/" });
+    expect(env.NEXT_PUBLIC_SITE_URL).toBe("https://erp.exemplo.com");
+  });
+
+  it.each([
+    ["true", true],
+    [undefined, false],
+    ["", false],
+    ["false", false],
+    ["TRUE", false],
+    ["true ", false],
+    ["1", false],
+  ])("ALLOW_PUBLIC_SIGNUP=%j -> %s", (value, expected) => {
+    expect(parseServerEnv({ ...valid, ALLOW_PUBLIC_SIGNUP: value }).ALLOW_PUBLIC_SIGNUP).toBe(
+      expected,
+    );
   });
 });

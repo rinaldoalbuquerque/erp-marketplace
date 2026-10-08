@@ -5,6 +5,13 @@ export const serverEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
   SUPABASE_SECRET_KEY: z.string().min(1),
   DATABASE_URL: z.url(),
+  /** Base URL used in e-mail links, e.g. http://localhost:3000 (no trailing slash). */
+  NEXT_PUBLIC_SITE_URL: z.url().transform((url) => url.replace(/\/+$/, "")),
+  /** Open sign-up. Only the exact value "true" enables it; anything else keeps it closed. */
+  ALLOW_PUBLIC_SIGNUP: z
+    .string()
+    .optional()
+    .transform((value) => value === "true"),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
