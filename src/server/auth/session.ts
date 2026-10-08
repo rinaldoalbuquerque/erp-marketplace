@@ -1,6 +1,7 @@
 import "server-only";
 
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { cache } from "react";
 
 import { ROUTES } from "@/lib/auth/routes";
@@ -27,6 +28,10 @@ export type CurrentMember = {
  * never trusts the cookie as-is. Deduplicated per request.
  */
 export const getAuthUser = cache(async (): Promise<AuthUser | null> => {
+  // Session checks are always request-time: getClaims() compares the token
+  // expiry with the clock (Date.now), which Cache Components forbids while
+  // prerendering. https://nextjs.org/docs/messages/blocking-prerender-current-time
+  await connection();
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.getClaims();
   const claims = data?.claims;
