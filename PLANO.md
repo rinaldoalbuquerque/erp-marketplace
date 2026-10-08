@@ -115,7 +115,12 @@ ERP para gerenciar marketplaces, começando pelo Mercado Livre, com foco em **pr
   - Testado: concorrência e idempotência contra o banco (`npm run test:db`, em empresa temporária) e teste manual em 08/10/2026.
 
 ### Fase 2 — Conexão com o ML e anúncios
-- [ ] **2.0** Conectar contas do ML (OAuth, refresh automático, tokens criptografados), contas ilimitadas; detectar tipo de modelo (tradicional/UP)
+- [x] **2.0** Conectar contas do ML (OAuth, refresh automático, tokens criptografados), contas ilimitadas; detectar tipo de modelo (tradicional/UP)
+  - Aplicação "ERPMarketplace" no DevCenter (PKCE, Authorization Code + Refresh Token). Redirect: `https://erp-marketplace-ivory.vercel.app/contas/mercadolivre/retorno`.
+  - Conexão feita pela Vercel (ML exige HTTPS). Tokens AES-256-GCM; renovação com trava por conta (refresh token do ML é de uso único).
+  - Testado em 08/10/2026 com a conta BELA.UTILIDADES (User Products detectado pela tag `user_product_seller`).
+  - Hospedagem: Vercel Hobby enquanto for desenvolvimento/testes; avaliar Pro (ou outra) antes do uso real, junto com a fila de tarefas.
+  - Pendente: criar usuários de teste do ML antes de qualquer função que publique/altere anúncios; renovação preventiva de contas paradas (com a fila).
 - [ ] **2A** Importar anúncios; lista com filtros e busca; tela de Mapeamento
 - [ ] **2B** Renderizador de formulário por categoria + edição de anúncios (valida o motor do formulário)
 - [ ] **2C** Criar anúncio: sugestão de categoria, simulador de preço, validação, publicação, rascunhos

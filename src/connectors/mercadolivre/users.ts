@@ -13,8 +13,9 @@ import { ML_API_BASE, mlFetch, readErrorBody, type FetchFn } from "./http";
 // User Products sellers carry the tag "user_product_seller" in the /users API:
 // https://developers.mercadolivre.com.br/pt_br/user-products
 //
-// TO CONFIRM on the first real connection: the exact shape of /users/me
-// (we rely only on id, nickname, site_id and tags, all tolerant to absence).
+// Confirmed on a real MLB account (2026-10-08): /users/me returns `tags` (array
+// of strings, e.g. ["normal","business","eshop","user_product_seller"]), `id`,
+// `nickname` and `site_id`. We rely only on these, tolerant to absence.
 
 export const USER_PRODUCT_SELLER_TAG = "user_product_seller";
 

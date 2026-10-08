@@ -63,7 +63,7 @@ ERP para gerenciar anúncios, estoque e pedidos em marketplaces.
 - Que permissões e cadastro fiscal o Faturador do ML exige para emitir NF por API na conta real.
 - Endpoints `/categories/{id}/attributes` e `/items/validate`: confirmar formato atual na documentação.
 - Descrição de anúncio do ML aceita só texto simples? Confirmar.
-- Como o User Product se comporta nas contas reais do Brasil (quais contas têm a tag, como a criação responde em cada tipo).
+- Como o User Product se comporta nas contas reais do Brasil (como a criação responde em cada tipo). Já confirmado: `/users/me` traz `tags` com `user_product_seller` (conta BELA.UTILIDADES).
 - Limites de requisições da API do ML.
 
 ## Comandos
@@ -90,6 +90,9 @@ Notas técnicas:
 - **Dados de negócio só via `getTenantContext()` / `tenantDb()`** (`src/server/tenant/`), que filtra tudo pela organização. O `db` "livre" (`src/server/db.ts`) fica restrito a rotinas internas (auth, provisionamento, jobs). Toda tabela nova com `organizationId` entra em `TENANT_MODELS` (`src/server/tenant/scope.ts`; um teste falha se esquecer). Com o `tenantDb`: sem nested writes e sem SQL bruto.
 - URLs das páginas em português (`/entrar`, `/painel`), listadas em `src/lib/auth/routes.ts`.
 - **Estoque só muda por `adjustStock()`** (`src/server/stock/stock-service.ts`), que grava saldo + movimentação na mesma transação. Nunca alterar `stockOnHand` direto. Eventos externos (vendas do ML) sempre com `idempotencyKey`.
+- **Chamadas ao marketplace sempre com `getAccessToken()`** (`src/server/marketplaces/token-service.ts`): renova sozinho, com trava por conta (refresh token do ML é de uso único). Nunca ler/decifrar token por conta própria. Conectores recebem config injetada (`src/server/marketplaces/config.ts`) e são testados com `fetch` simulado.
+- A conexão com o ML (OAuth) só funciona pelo endereço da Vercel (redirect HTTPS cadastrado na aplicação). Local e Vercel compartilham banco e `TOKEN_ENCRYPTION_KEY`.
+- Testes: `npm run check` encadeado com `set -o pipefail` (ou checando o código de saída) antes de commitar, para não commitar com teste falhando.
 - Tabelas filhas de negócio usam chave estrangeira composta `(organizationId, xId)` → `(organizationId, id)` do pai, para o banco impedir vínculo entre empresas.
 - Menu lateral: itens em `src/lib/navigation.ts` (cada um com a permissão exigida; tirar o `comingSoon` quando o módulo existir).
 - Tema "Expedição" (claro/escuro): usar **só os tokens de cor** de `src/app/globals.css` (`bg-surface`, `text-ink`, `text-muted`, `bg-brand`, `text-signal`...), nunca cores fixas como `gray-500` ou `blue-600`. Âmbar (`signal`) é reservado para o que pede atenção. Títulos usam a fonte condensada (`font-display`).
