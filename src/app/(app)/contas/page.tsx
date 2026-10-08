@@ -4,13 +4,38 @@ import { Suspense } from "react";
 
 import { ButtonLink, PageHeader } from "@/components/ui/page-header";
 import { requirePermission } from "@/server/auth/session";
+import { latestImportJobs } from "@/server/listings/import-service";
 import { listAccounts } from "@/server/marketplaces/accounts";
 import { env } from "@/server/env";
 import { getTenantContext } from "@/server/tenant/tenant-db";
 
 import { disconnectAccountAction, testConnectionAction } from "./actions";
+import type { ImportProgress } from "./import-actions";
+import { ImportPanel } from "./import-panel";
 
 export const metadata: Metadata = { title: "Contas de marketplace" };
+
+// Server Actions on this page (listing import) run in the background with
+// `after`, which gets the page's max duration (Vercel Hobby limit: 300s).
+export const maxDuration = 300;
+
+/** Latest import job row of an account (see latestImportJobs). */
+type ImportJob = NonNullable<ReturnType<Awaited<ReturnType<typeof latestImportJobs>>["get"]>>;
+
+function toProgress(job: ImportJob | undefined): ImportProgress | null {
+  if (!job) return null;
+  return {
+    jobId: job.id,
+    status: job.status,
+    total: job.total,
+    processed: job.processed,
+    createdCount: job.createdCount,
+    updatedCount: job.updatedCount,
+    failedCount: job.failedCount,
+    errors: (Array.isArray(job.errors) ? job.errors : []) as ImportProgress["errors"],
+    lastError: job.lastError,
+  };
+}
 
 const CONNECT_URL = "/contas/mercadolivre/conectar";
 
@@ -58,7 +83,7 @@ function param(value: string | string[] | undefined) {
 async function Accounts({ searchParams }: Pick<PageProps<"/contas">, "searchParams">) {
   const member = await requirePermission("marketplaceAccounts.manage");
   const { tdb } = await getTenantContext(member);
-  const accounts = await listAccounts(tdb);
+  const [accounts, importJobs] = await Promise.all([listAccounts(tdb), latestImportJobs(tdb)]);
   const query = await searchParams;
 
   const configured = Boolean(
@@ -157,6 +182,13 @@ async function Accounts({ searchParams }: Pick<PageProps<"/contas">, "searchPara
                 <p className="rounded-lg bg-signal-soft px-3 py-2 text-sm text-signal-ink">
                   {account.lastError}
                 </p>
+              ) : null}
+
+              {account.status === "active" ? (
+                <ImportPanel
+                  accountId={account.id}
+                  initial={toProgress(importJobs.get(account.id))}
+                />
               ) : null}
 
               <div className="mt-auto flex flex-wrap gap-2">

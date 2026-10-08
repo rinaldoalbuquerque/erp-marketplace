@@ -37,7 +37,6 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         href: "/anuncios",
         icon: "listings",
         permission: "listings.view",
-        comingSoon: true,
       },
       {
         label: "Mapeamento",
