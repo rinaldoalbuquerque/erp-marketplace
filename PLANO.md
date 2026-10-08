@@ -121,7 +121,13 @@ ERP para gerenciar marketplaces, começando pelo Mercado Livre, com foco em **pr
   - Testado em 08/10/2026 com a conta BELA.UTILIDADES (User Products detectado pela tag `user_product_seller`).
   - Hospedagem: Vercel Hobby enquanto for desenvolvimento/testes; avaliar Pro (ou outra) antes do uso real, junto com a fila de tarefas.
   - Pendente: criar usuários de teste do ML antes de qualquer função que publique/altere anúncios; renovação preventiva de contas paradas (com a fila).
-- [ ] **2A** Importar anúncios; lista com filtros e busca; tela de Mapeamento
+- [x] **2A** Importar anúncios; lista com filtros e busca; tela de Mapeamento
+  - Importação em segundo plano (tabela `sync_jobs` + `after()`), com progresso, relatório, retomada e idempotência. Busca `search_type=scan` + `/items/bulk` (o `/items?ids=` será desligado em 25/10/2026).
+  - Testado em 08/10/2026: 868 anúncios da BELA.UTILIDADES em 37 s, sem erros (845 UP, 23 tradicionais, 44 variações). Estoque confere com o painel do ML.
+  - Mapeamento SKU ↔ anúncio/variação, com vinculação automática por código igual (com desfazer).
+  - Fila "de verdade" (pg-boss com servidor próprio, ou serviço hospedado) decidida na 2D, junto com a hospedagem.
+  - Ainda não: agrupar a lista por família (abrir/fechar), sincronização periódica automática.
+- [ ] **2A+** Criar produtos e SKUs do ERP a partir dos anúncios importados (com revisão antes)
 - [ ] **2B** Renderizador de formulário por categoria + edição de anúncios (valida o motor do formulário)
 - [ ] **2C** Criar anúncio: sugestão de categoria, simulador de preço, validação, publicação, rascunhos
 - [ ] **2D** Replicação, cópia de fora e migração entre contas (reaproveita formulário e rascunhos), com fila em segundo plano

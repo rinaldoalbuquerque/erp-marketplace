@@ -18,7 +18,7 @@ ERP para gerenciar anúncios, estoque e pedidos em marketplaces.
 - Prisma como ORM e para migrations
 - Validação de entrada com Zod
 - Testes: Vitest (unidade) e Playwright (fluxos principais, mais tarde)
-- Tarefas em segundo plano (sincronização, replicação em lote): ferramenta a decidir na Fase 2 (avaliar `pg-boss` ou similar, que usa o próprio PostgreSQL)
+- Tarefas em segundo plano: por enquanto tabela `sync_jobs` + `after()` do Next (rodadas com limite de tempo, retomada por `pendingIds`, uma rodada por vez). Fila definitiva (pg-boss + servidor, ou serviço hospedado) a decidir na 2D
 
 ## Idioma
 
@@ -91,6 +91,8 @@ Notas técnicas:
 - URLs das páginas em português (`/entrar`, `/painel`), listadas em `src/lib/auth/routes.ts`.
 - **Estoque só muda por `adjustStock()`** (`src/server/stock/stock-service.ts`), que grava saldo + movimentação na mesma transação. Nunca alterar `stockOnHand` direto. Eventos externos (vendas do ML) sempre com `idempotencyKey`.
 - **Chamadas ao marketplace sempre com `getAccessToken()`** (`src/server/marketplaces/token-service.ts`): renova sozinho, com trava por conta (refresh token do ML é de uso único). Nunca ler/decifrar token por conta própria. Conectores recebem config injetada (`src/server/marketplaces/config.ts`) e são testados com `fetch` simulado.
+- ML: ler anúncios em lote só com `/items/bulk?ids=` (máx. 20); `/items?ids=` está sendo desligado (25/10/2026). Listar anúncios do vendedor com `search_type=scan`.
+- Anúncios importados ficam em `listings` (com `raw` = resposta completa do ML); vínculo com SKU em `sku_listing_mappings` (um SKU por anúncio/variação).
 - A conexão com o ML (OAuth) só funciona pelo endereço da Vercel (redirect HTTPS cadastrado na aplicação). Local e Vercel compartilham banco e `TOKEN_ENCRYPTION_KEY`.
 - Testes: `npm run check` encadeado com `set -o pipefail` (ou checando o código de saída) antes de commitar, para não commitar com teste falhando.
 - Tabelas filhas de negócio usam chave estrangeira composta `(organizationId, xId)` → `(organizationId, id)` do pai, para o banco impedir vínculo entre empresas.
