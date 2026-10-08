@@ -1,4 +1,4 @@
-import { Plus, Search } from "lucide-react";
+import { PackagePlus, Plus, Search } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -50,10 +50,16 @@ async function ProductList({ searchParams }: Pick<PageProps<"/produtos">, "searc
         description={`${total} ${total === 1 ? "produto" : "produtos"}${archived ? " arquivados" : ""}`}
         actions={
           can(member.role, "products.edit") ? (
-            <ButtonLink href="/produtos/novo">
-              <Plus className="size-4" aria-hidden="true" />
-              Novo produto
-            </ButtonLink>
+            <>
+              <ButtonLink href="/produtos/criar-dos-anuncios" variant="secondary">
+                <PackagePlus className="size-4" aria-hidden="true" />
+                Criar a partir dos anúncios
+              </ButtonLink>
+              <ButtonLink href="/produtos/novo">
+                <Plus className="size-4" aria-hidden="true" />
+                Novo produto
+              </ButtonLink>
+            </>
           ) : null
         }
       />
