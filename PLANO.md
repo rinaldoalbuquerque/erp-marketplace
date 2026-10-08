@@ -100,8 +100,11 @@ ERP para gerenciar marketplaces, começando pelo Mercado Livre, com foco em **pr
   - Testado na conta real em 07/10/2026 (cadastro, confirmação, organização automática, login, sair, redefinir senha). Links de e-mail precisam ser abertos no mesmo navegador do cadastro/pedido (fluxo PKCE do modelo de e-mail padrão).
   - Pendente: textos definitivos de Termos de Uso e Política de Privacidade (hoje provisórios); SMTP próprio (o e-mail padrão do Supabase só entrega para a equipe do projeto, e os modelos de e-mail só podem ser editados/traduzidos com SMTP próprio; hoje os e-mails chegam em inglês).
   - Ficou para depois: sair de todos os dispositivos, convite de funcionário, 2FA.
-- [ ] Perfis de acesso e camada de dados filtrando por organização
-  - Já existe `requireMember()` (`src/server/auth/session.ts`), que devolve usuário + organização + papel: ponto de partida da camada de dados.
+- [x] Perfis de acesso e camada de dados filtrando por organização
+  - Tabela de permissões owner/admin/operator (`src/domain/auth/permissions.ts`); operador não vê financeiro nem tokens e não apaga anúncios; admin gerencia só operadores; configurações da empresa só o owner.
+  - `requirePermission()` + página `/sem-permissao`.
+  - `tenantDb()` / `getTenantContext()`: acesso ao banco que acrescenta o `organization_id` sozinho e recusa outra organização. Testado também contra o banco real (`npm run test:db`).
+  - Decisão: RLS do Supabase **não** é usado para separar organizações por enquanto (o app acessa o banco pelo servidor com um usuário que ignora RLS; exigiria configurar o banco a cada requisição). O RLS segue ligado, sem regras, só para bloquear acesso direto do navegador. Revisar na fase SaaS.
 - [ ] Layout base e menu lateral
 - [ ] Produtos e SKUs (com campos fiscais) e estoque com movimentações
 

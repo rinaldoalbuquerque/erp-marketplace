@@ -74,6 +74,7 @@ ERP para gerenciar anúncios, estoque e pedidos em marketplaces.
 | `npm run dev` | Roda em desenvolvimento (http://localhost:3000) |
 | `npm run check` | **Rodar antes de cada commit:** lint + typecheck + formatação + testes |
 | `npm run lint` / `npm run typecheck` / `npm test` | Cada verificação separada |
+| `npm run test:db` | Testes contra o banco do `.env` (`*.db.test.ts`, só leitura) |
 | `npm run format` | Formata o código com Prettier |
 | `npm run db:migrate` | Cria/aplica migration (`npx prisma migrate dev --create-only --name x` para revisar o SQL antes) |
 | `npm run db:generate` | Regenera o cliente do Prisma |
@@ -84,7 +85,9 @@ Notas técnicas:
 - `DATABASE_URL` (pooler, porta 6543) é usado pelo app; `DIRECT_URL` (porta 5432) pelas migrations.
 - Toda tabela nova no schema `public` precisa de `ENABLE ROW LEVEL SECURITY` na migration (sem policies), para o navegador não acessar via Data API do Supabase.
 - Variáveis de ambiente validadas em `src/server/env.ts`; código só do servidor usa `import "server-only"`.
-- Autenticação: toda página interna e toda Server Action começa com `requireMember()` (`src/server/auth/session.ts`) e filtra os dados pelo `organizationId` retornado. O `src/proxy.ts` é só a primeira camada. Leitura de sessão fica dentro de `<Suspense>` (Cache Components ligado).
+- Autenticação: toda página interna e toda Server Action começa com `requireMember()` ou `requirePermission("...")` (`src/server/auth/session.ts`). O `src/proxy.ts` é só a primeira camada. Leitura de sessão fica dentro de `<Suspense>` (Cache Components ligado).
+- Permissões: tabela única em `src/domain/auth/permissions.ts` (`can(role, permission)`). Esconder botão é só visual; quem protege é `requirePermission` no servidor.
+- **Dados de negócio só via `getTenantContext()` / `tenantDb()`** (`src/server/tenant/`), que filtra tudo pela organização. O `db` "livre" (`src/server/db.ts`) fica restrito a rotinas internas (auth, provisionamento, jobs). Toda tabela nova com `organizationId` entra em `TENANT_MODELS` (`src/server/tenant/scope.ts`; um teste falha se esquecer). Com o `tenantDb`: sem nested writes e sem SQL bruto.
 - URLs das páginas em português (`/entrar`, `/painel`), listadas em `src/lib/auth/routes.ts`.
 
 ## Estrutura de pastas (alvo)
