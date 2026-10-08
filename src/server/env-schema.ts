@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+/** Optional variable: empty string counts as "not set". */
+const optional = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((value) => (value === "" ? undefined : value), schema.optional());
+
 export const serverEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.url(),
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
@@ -12,6 +16,15 @@ export const serverEnvSchema = z.object({
     .string()
     .optional()
     .transform((value) => value === "true"),
+
+  // Marketplace integration. Optional so the rest of the ERP runs without them;
+  // the Mercado Livre connector checks them when used (requireMercadoLivreConfig).
+  /** base64 of 32 random bytes; encrypts marketplace tokens. Same value everywhere (local + Vercel). */
+  TOKEN_ENCRYPTION_KEY: optional(z.string()),
+  ML_CLIENT_ID: optional(z.string()),
+  ML_CLIENT_SECRET: optional(z.string()),
+  /** Must match exactly the redirect URI registered in the Mercado Livre application. */
+  ML_REDIRECT_URI: optional(z.url()),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
