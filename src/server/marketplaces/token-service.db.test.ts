@@ -38,6 +38,8 @@ function fakeConnector() {
     getAccountProfile: async () => {
       throw new Error("not used");
     },
+    listListingIds: async () => [],
+    getListings: async () => [],
     refreshTokens: async (refreshToken): Promise<OAuthTokens> => {
       calls.refresh++;
       await new Promise((resolve) => setTimeout(resolve, 50)); // network latency

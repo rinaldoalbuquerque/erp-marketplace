@@ -1,5 +1,6 @@
 import type { MarketplaceConnector } from "../types";
 import type { FetchFn } from "./http";
+import { getListings, listListingIds } from "./items";
 import {
   buildAuthorizationUrl,
   exchangeCode,
@@ -22,5 +23,8 @@ export function createMercadoLivreConnector(
     exchangeCode: (input) => exchangeCode(config, fetchFn, input),
     refreshTokens: (refreshToken) => refreshTokens(config, fetchFn, refreshToken),
     getAccountProfile: (accessToken) => getAccountProfile(fetchFn, accessToken),
+    listListingIds: (accessToken, externalUserId) =>
+      listListingIds(fetchFn, accessToken, externalUserId),
+    getListings: (accessToken, externalIds) => getListings(fetchFn, accessToken, externalIds),
   };
 }
