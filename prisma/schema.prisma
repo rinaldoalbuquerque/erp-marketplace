@@ -25,7 +25,10 @@ model Organization {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  memberships Membership[]
+  memberships    Membership[]
+  products       Product[]
+  skus           Sku[]
+  stockMovements StockMovement[]
 
   @@map("organizations")
 }
@@ -40,7 +43,8 @@ model Profile {
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  memberships Membership[]
+  memberships    Membership[]
+  stockMovements StockMovement[]
 
   @@map("profiles")
 }
@@ -60,4 +64,119 @@ model Membership {
   @@unique([organizationId, userId])
   @@index([userId])
   @@map("memberships")
+}
+
+/// What happened to the stock. Signed quantity lives in StockMovement.quantity.
+enum StockMovementType {
+  /// Manual entry (purchase, production...)
+  manual_in
+  /// Manual exit (loss, damage, internal use...)
+  manual_out
+  /// Physical count: stock set to the counted amount
+  count
+  /// Marketplace sale (Phase 3)
+  sale
+  /// Customer return (Phase 3)
+  sale_return
+
+  @@map("stock_movement_type")
+}
+
+/// Sellable item grouping its variations (SKUs). Archived, never deleted.
+model Product {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  name           String
+  brand          String?
+  description    String?
+  archivedAt     DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  skus         Sku[]
+
+  /// Target of composite foreign keys (a SKU can only point to a product of its own organization).
+  @@unique([organizationId, id])
+  @@index([organizationId, name])
+  @@map("products")
+}
+
+/// A sellable variation. Stock belongs to the SKU (CLAUDE.md: "Estoque é do ERP, por SKU").
+model Sku {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String  @map("organization_id") @db.Uuid
+  productId      String  @map("product_id") @db.Uuid
+  /// Stored uppercase and trimmed; unique per organization.
+  code           String
+  /// EAN/GTIN (8, 12, 13 or 14 digits, check digit validated)
+  ean            String?
+  /// Variation attributes: [{ "name": "Cor", "value": "Azul" }, ...]
+  variation      Json?
+
+  // Fiscal (NF-e)
+  /// 8 digits
+  ncm         String?
+  /// 7 digits
+  cest        String?
+  /// NF-e origin code 0-8
+  origin      Int?
+  unit        String  @default("UN")
+  /// 4 digits, e.g. 5102
+  defaultCfop String? @map("default_cfop")
+
+  // Shipping (optional)
+  weightGrams Int? @map("weight_grams")
+  heightCm    Int? @map("height_cm")
+  widthCm     Int? @map("width_cm")
+  lengthCm    Int? @map("length_cm")
+
+  /// Where it is in the warehouse, e.g. "Prateleira A3"
+  location  String?
+  /// Unit cost in cents (visible only with "financial.view")
+  costCents Int?    @map("cost_cents")
+
+  /// Current balance. Changed ONLY together with a StockMovement (src/server/stock).
+  stockOnHand Int @default(0) @map("stock_on_hand")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Composite key: the product must belong to the same organization (enforced by the database).
+  // NoAction (checked at end of statement) so deleting an organization cascades cleanly.
+  product        Product         @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: NoAction)
+  stockMovements StockMovement[]
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, code])
+  @@unique([organizationId, ean])
+  @@index([productId])
+  @@map("skus")
+}
+
+/// Stock history. Append-only: never updated or deleted.
+model StockMovement {
+  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String            @map("organization_id") @db.Uuid
+  skuId          String            @map("sku_id") @db.Uuid
+  type           StockMovementType
+  /// Signed change: +10 entry, -1 sale
+  quantity       Int
+  /// SKU balance right after this movement
+  balanceAfter   Int               @map("balance_after")
+  reason         String?
+  /// Prevents applying the same event twice (e.g. a marketplace sale notification)
+  idempotencyKey String?           @map("idempotency_key")
+  createdById    String?           @map("created_by_id") @db.Uuid
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Composite key: the SKU must belong to the same organization.
+  sku          Sku          @relation(fields: [organizationId, skuId], references: [organizationId, id], onDelete: NoAction)
+  createdBy    Profile?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([skuId, createdAt])
+  @@map("stock_movements")
 }

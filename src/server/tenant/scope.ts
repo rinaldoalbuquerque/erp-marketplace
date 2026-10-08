@@ -9,7 +9,12 @@
  * Prisma models that have an `organizationId` column. A test checks this list
  * against prisma/schema.prisma, so a new business table can't be forgotten.
  */
-export const TENANT_MODELS: ReadonlySet<string> = new Set(["Membership"]);
+export const TENANT_MODELS: ReadonlySet<string> = new Set([
+  "Membership",
+  "Product",
+  "Sku",
+  "StockMovement",
+]);
 
 export class TenantScopeError extends Error {
   constructor(message: string) {
