@@ -21,7 +21,16 @@ export type ServerEnv = z.infer<typeof serverEnvSchema>;
  * missing/invalid variable names. Never includes the values (they are secrets).
  */
 export function parseServerEnv(source: Record<string, string | undefined>): ServerEnv {
-  const result = serverEnvSchema.safeParse(source);
+  // Values pasted into .env or the Vercel dashboard often carry an invisible
+  // trailing newline/space. Trim them, except the sign-up flag, which stays
+  // strict on purpose (anything but exactly "true" keeps sign-up closed).
+  const trimmed = Object.fromEntries(
+    Object.entries(source).map(([key, value]) => [
+      key,
+      key === "ALLOW_PUBLIC_SIGNUP" ? value : value?.trim(),
+    ]),
+  );
+  const result = serverEnvSchema.safeParse(trimmed);
   if (!result.success) {
     const names = [...new Set(result.error.issues.map((issue) => issue.path.join(".")))];
     throw new Error(

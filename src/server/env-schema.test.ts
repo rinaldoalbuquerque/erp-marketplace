@@ -28,6 +28,16 @@ describe("parseServerEnv", () => {
     ).toThrow(expect.objectContaining({ message: expect.not.stringContaining(secret) }));
   });
 
+  it("ignores invisible whitespace pasted around values", () => {
+    const env = parseServerEnv({
+      ...valid,
+      NEXT_PUBLIC_SITE_URL: "https://erp.exemplo.com\n",
+      SUPABASE_SECRET_KEY: " sb_secret_test\r\n",
+    });
+    expect(env.NEXT_PUBLIC_SITE_URL).toBe("https://erp.exemplo.com");
+    expect(env.SUPABASE_SECRET_KEY).toBe("sb_secret_test");
+  });
+
   it("removes a trailing slash from the site URL", () => {
     const env = parseServerEnv({ ...valid, NEXT_PUBLIC_SITE_URL: "https://erp.exemplo.com/" });
     expect(env.NEXT_PUBLIC_SITE_URL).toBe("https://erp.exemplo.com");

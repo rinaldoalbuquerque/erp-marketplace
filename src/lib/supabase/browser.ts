@@ -9,8 +9,9 @@ import { createBrowserClient } from "@supabase/ssr";
  */
 export function createSupabaseBrowserClient() {
   // NEXT_PUBLIC_* vars must be read literally so Next.js can inline them.
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  // Trimmed: pasted values can carry an invisible trailing newline.
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim();
   if (!url || !key) {
     throw new Error(
       "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (see .env.example).",
