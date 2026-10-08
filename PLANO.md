@@ -105,7 +105,9 @@ ERP para gerenciar marketplaces, começando pelo Mercado Livre, com foco em **pr
   - `requirePermission()` + página `/sem-permissao`.
   - `tenantDb()` / `getTenantContext()`: acesso ao banco que acrescenta o `organization_id` sozinho e recusa outra organização. Testado também contra o banco real (`npm run test:db`).
   - Decisão: RLS do Supabase **não** é usado para separar organizações por enquanto (o app acessa o banco pelo servidor com um usuário que ignora RLS; exigiria configurar o banco a cada requisição). O RLS segue ligado, sem regras, só para bloquear acesso direto do navegador. Revisar na fase SaaS.
-- [ ] Layout base e menu lateral
+- [x] Layout base e menu lateral
+  - Menu filtrado por perfil (módulos futuros aparecem como "em breve"), menu ☰ no celular, topo com empresa, usuário, perfil e Sair.
+  - Tema "Expedição" (verde-petróleo + âmbar, fontes IBM Plex) com botão claro/escuro/sistema, salvo no navegador.
 - [ ] Produtos e SKUs (com campos fiscais) e estoque com movimentações
 
 ### Fase 2 — Conexão com o ML e anúncios
