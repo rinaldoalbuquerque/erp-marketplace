@@ -1,35 +1,64 @@
 import { Suspense } from "react";
 
 import { LogoutButton } from "@/components/auth/logout-button";
+import { AppShell } from "@/components/layout/app-shell";
+import { SideNav } from "@/components/layout/side-nav";
+import { ROLE_LABELS } from "@/domain/auth/permissions";
+import { navForRole } from "@/lib/navigation";
 import { requireMember } from "@/server/auth/session";
 
 /**
- * Layout of the internal (logged-in) area. Temporary header: the real layout
- * and side menu are the next task in PLANO.md.
- * The session is read inside <Suspense> (required by Cache Components).
+ * Layout of the internal (logged-in) area: side menu + top bar.
+ * Parts that read the session sit inside <Suspense> (required by Cache Components),
+ * so the frame shows instantly and the user-specific parts stream in.
+ * Pages still call requireMember()/requirePermission() themselves.
  */
 export default function AppLayout({ children }: LayoutProps<"/">) {
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50">
-      <header className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3">
-        <span className="font-semibold text-gray-900">ERP Marketplace</span>
-        <Suspense fallback={null}>
-          <UserMenu />
+    <AppShell
+      sidebar={
+        <Suspense fallback={<NavSkeleton />}>
+          <RoleNav />
         </Suspense>
-      </header>
-      <main className="flex-1 p-6">{children}</main>
-    </div>
+      }
+      header={
+        <Suspense fallback={<span className="text-sm text-gray-400">Carregando…</span>}>
+          <TopBar />
+        </Suspense>
+      }
+    >
+      {children}
+    </AppShell>
   );
 }
 
-async function UserMenu() {
+async function RoleNav() {
+  const member = await requireMember();
+  return <SideNav sections={navForRole(member.role)} />;
+}
+
+async function TopBar() {
   const member = await requireMember();
   return (
-    <div className="flex items-center gap-4 text-sm text-gray-700">
-      <span>
-        {member.fullName} · {member.organizationName}
-      </span>
-      <LogoutButton />
+    <>
+      <span className="truncate font-medium text-gray-900">{member.organizationName}</span>
+      <div className="flex items-center gap-3 text-sm text-gray-700">
+        <span className="hidden text-right sm:block">
+          {member.fullName}
+          <span className="block text-xs text-gray-500">{ROLE_LABELS[member.role]}</span>
+        </span>
+        <LogoutButton />
+      </div>
+    </>
+  );
+}
+
+function NavSkeleton() {
+  return (
+    <div className="flex flex-col gap-2" aria-hidden="true">
+      {Array.from({ length: 7 }, (_, index) => (
+        <div key={index} className="h-8 animate-pulse rounded-md bg-gray-100" />
+      ))}
     </div>
   );
 }
