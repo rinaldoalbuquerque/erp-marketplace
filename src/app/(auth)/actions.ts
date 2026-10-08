@@ -6,9 +6,16 @@ import { authErrorMessage, GENERIC_ERROR, SIGNUP_CLOSED } from "@/lib/auth/error
 import { readFields, type FormState } from "@/lib/auth/form-state";
 import { evaluatePassword } from "@/lib/auth/password-strength";
 import { ROUTES, safeNextPath } from "@/lib/auth/routes";
-import { emailOnlySchema, fieldErrors, loginSchema, signupSchema } from "@/lib/auth/schemas";
+import {
+  emailOnlySchema,
+  fieldErrors,
+  loginSchema,
+  resetPasswordSchema,
+  signupSchema,
+} from "@/lib/auth/schemas";
 import { provisionUserInDatabase } from "@/server/auth/provisioning-store";
 import { isPwnedPassword } from "@/server/auth/pwned-password";
+import { getAuthUser } from "@/server/auth/session";
 import { env } from "@/server/env";
 import { createSupabaseServerClient } from "@/server/supabase";
 
@@ -147,4 +154,64 @@ export async function logoutAction(): Promise<void> {
   // "local": ends this browser's session only.
   await supabase.auth.signOut({ scope: "local" });
   redirect(ROUTES.login);
+}
+
+export async function forgotPasswordAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const raw = readFields(formData, ["email"]);
+  const parsed = emailOnlySchema.safeParse(raw);
+  if (!parsed.success) {
+    return { status: "error", fieldErrors: fieldErrors(parsed.error), values: raw };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
+    redirectTo: confirmUrl(),
+  });
+  if (error?.code === "over_email_send_rate_limit" || error?.code === "over_request_rate_limit") {
+    return { status: "error", message: authErrorMessage(error.code), values: raw };
+  }
+
+  // Same answer whether or not the e-mail has an account.
+  return {
+    status: "success",
+    message:
+      "Se esse e-mail tiver uma conta, enviamos um link para criar uma nova senha. Confira também a caixa de spam.",
+    values: raw,
+  };
+}
+
+export async function resetPasswordAction(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  // Needs the session created by the recovery link (see /auth/confirm).
+  const user = await getAuthUser();
+  if (!user) {
+    return {
+      status: "error",
+      message: "Sua sessão expirou. Peça um novo link em “Esqueci minha senha”.",
+    };
+  }
+
+  const raw = readFields(formData, ["password", "confirmPassword"]);
+  const parsed = resetPasswordSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { status: "error", fieldErrors: fieldErrors(parsed.error) };
+  }
+
+  const problem = await passwordProblem(parsed.data.password, [user.email]);
+  if (problem) {
+    return { status: "error", fieldErrors: { password: problem } };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
+  if (error) {
+    return { status: "error", message: authErrorMessage(error.code) };
+  }
+
+  redirect(`${ROUTES.home}?senha-alterada=1`);
 }
