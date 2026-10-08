@@ -9,7 +9,8 @@ import {
   type PasswordStrength,
 } from "@/lib/auth/password-strength";
 
-const BAR_COLORS = ["bg-red-500", "bg-red-500", "bg-yellow-500", "bg-green-500", "bg-green-600"];
+// Weak = danger, middling = amber signal, acceptable = success.
+const BAR_COLORS = ["bg-danger", "bg-danger", "bg-signal", "bg-success", "bg-success"];
 
 /**
  * Live password strength indicator. Only a guide: the server checks again.
@@ -57,15 +58,15 @@ export function PasswordStrengthMeter({
           <span
             key={index}
             className={`h-1.5 flex-1 rounded ${
-              index <= strength.score ? BAR_COLORS[strength.score] : "bg-gray-200"
+              index <= strength.score ? BAR_COLORS[strength.score] : "bg-surface-2"
             }`}
           />
         ))}
       </div>
       <p>
-        Força: <strong>{PASSWORD_SCORE_LABELS[strength.score]}</strong>
+        Força: <strong className="text-ink">{PASSWORD_SCORE_LABELS[strength.score]}</strong>
         {strength.acceptable ? " ✓" : ""}
-        {tip ? ` — ${tip}` : ""}
+        {tip ? `. ${tip}` : ""}
       </p>
     </div>
   );

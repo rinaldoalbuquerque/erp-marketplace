@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { AppShell } from "@/components/layout/app-shell";
 import { SideNav } from "@/components/layout/side-nav";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { ROLE_LABELS } from "@/domain/auth/permissions";
 import { navForRole } from "@/lib/navigation";
 import { requireMember } from "@/server/auth/session";
@@ -22,9 +23,17 @@ export default function AppLayout({ children }: LayoutProps<"/">) {
         </Suspense>
       }
       header={
-        <Suspense fallback={<span className="text-sm text-gray-400">Carregando…</span>}>
-          <TopBar />
-        </Suspense>
+        <>
+          <Suspense fallback={<span className="h-5 w-40 animate-pulse rounded bg-surface-2" />}>
+            <OrganizationName />
+          </Suspense>
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <Suspense fallback={null}>
+              <UserBox />
+            </Suspense>
+          </div>
+        </>
       }
     >
       {children}
@@ -37,27 +46,48 @@ async function RoleNav() {
   return <SideNav sections={navForRole(member.role)} />;
 }
 
-async function TopBar() {
+async function OrganizationName() {
   const member = await requireMember();
   return (
-    <>
-      <span className="truncate font-medium text-gray-900">{member.organizationName}</span>
-      <div className="flex items-center gap-3 text-sm text-gray-700">
-        <span className="hidden text-right sm:block">
-          {member.fullName}
-          <span className="block text-xs text-gray-500">{ROLE_LABELS[member.role]}</span>
+    <span className="truncate font-display text-lg font-semibold text-ink">
+      {member.organizationName}
+    </span>
+  );
+}
+
+function initials(fullName: string) {
+  const parts = fullName.trim().split(/\s+/);
+  const first = parts[0]?.[0] ?? "";
+  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "";
+  return (first + last).toUpperCase();
+}
+
+async function UserBox() {
+  const member = await requireMember();
+  return (
+    <div className="flex items-center gap-3">
+      <div className="hidden items-center gap-2.5 sm:flex">
+        <span
+          className="flex size-9 items-center justify-center rounded-full bg-brand font-display text-sm font-semibold text-on-brand"
+          aria-hidden="true"
+        >
+          {initials(member.fullName)}
         </span>
-        <LogoutButton />
+        <span className="text-sm leading-tight">
+          <span className="block font-medium text-ink">{member.fullName}</span>
+          <span className="block text-xs text-muted">{ROLE_LABELS[member.role]}</span>
+        </span>
       </div>
-    </>
+      <LogoutButton />
+    </div>
   );
 }
 
 function NavSkeleton() {
   return (
-    <div className="flex flex-col gap-2" aria-hidden="true">
+    <div className="flex flex-col gap-1.5" aria-hidden="true">
       {Array.from({ length: 7 }, (_, index) => (
-        <div key={index} className="h-8 animate-pulse rounded-md bg-gray-100" />
+        <div key={index} className="h-9 animate-pulse rounded-lg bg-sidebar-hover" />
       ))}
     </div>
   );

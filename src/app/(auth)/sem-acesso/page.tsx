@@ -8,8 +8,8 @@ export const metadata: Metadata = { title: "Sem acesso" };
 export default function NoAccessPage() {
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold text-gray-900">Sua conta ainda não tem acesso</h1>
-      <p className="text-sm text-gray-700">
+      <h1 className="text-2xl font-semibold text-ink">Sua conta ainda não tem acesso</h1>
+      <p className="text-sm text-ink">
         Seu e-mail foi confirmado, mas sua conta não está vinculada a nenhuma empresa. O acesso é
         liberado por convite: fale com o responsável pelo sistema.
       </p>

@@ -5,9 +5,9 @@ export const metadata: Metadata = { title: "Termos de Uso" };
 // TODO: replace with the final text provided by the owner.
 export default function TermsPage() {
   return (
-    <article className="flex flex-col gap-3 text-sm text-gray-700">
-      <h1 className="text-lg font-semibold text-gray-900">Termos de Uso</h1>
-      <p className="rounded-md bg-yellow-50 px-3 py-2 text-yellow-800">
+    <article className="flex flex-col gap-3 text-sm text-ink">
+      <h1 className="text-2xl font-semibold text-ink">Termos de Uso</h1>
+      <p className="rounded-md bg-signal-soft px-3 py-2 text-signal-ink">
         Texto provisório: os Termos de Uso definitivos ainda serão publicados.
       </p>
       <p>

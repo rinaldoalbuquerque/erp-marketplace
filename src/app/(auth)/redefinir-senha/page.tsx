@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Criar nova senha" };
 export default function ResetPasswordPage() {
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold text-gray-900">Criar nova senha</h1>
+      <h1 className="text-2xl font-semibold text-ink">Criar nova senha</h1>
       <ResetPasswordForm />
     </div>
   );

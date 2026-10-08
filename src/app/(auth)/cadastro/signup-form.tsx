@@ -62,13 +62,13 @@ export function SignupForm() {
       />
       {/* Show the meter under the error too, so the user sees what to fix. */}
       {errors.password ? (
-        <div className="-mt-2 text-sm text-gray-500">
+        <div className="-mt-2 text-sm text-muted">
           <PasswordStrengthMeter password={password} userInputs={[fullName, email]} />
         </div>
       ) : null}
 
       <div className="flex flex-col gap-1">
-        <label className="flex items-start gap-2 text-sm text-gray-700">
+        <label className="flex items-start gap-2 text-sm text-ink">
           <input
             type="checkbox"
             name="acceptTerms"
@@ -77,17 +77,17 @@ export function SignupForm() {
           />
           <span>
             Li e aceito os{" "}
-            <Link href={ROUTES.terms} target="_blank" className="text-blue-600 hover:underline">
+            <Link href={ROUTES.terms} target="_blank" className="text-brand hover:underline">
               Termos de Uso
             </Link>{" "}
             e a{" "}
-            <Link href={ROUTES.privacy} target="_blank" className="text-blue-600 hover:underline">
+            <Link href={ROUTES.privacy} target="_blank" className="text-brand hover:underline">
               Política de Privacidade
             </Link>
             .
           </span>
         </label>
-        {errors.acceptTerms ? <p className="text-sm text-red-600">{errors.acceptTerms}</p> : null}
+        {errors.acceptTerms ? <p className="text-sm text-danger">{errors.acceptTerms}</p> : null}
       </div>
 
       <SubmitButton pendingText="Criando conta…">Criar conta</SubmitButton>

@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Painel" };
 
 export default function DashboardPage({ searchParams }: PageProps<"/painel">) {
   return (
-    <Suspense fallback={<p className="text-sm text-gray-500">Carregando…</p>}>
+    <Suspense fallback={<p className="text-sm text-muted">Carregando…</p>}>
       <Dashboard searchParams={searchParams} />
     </Suspense>
   );
@@ -27,14 +27,12 @@ async function Dashboard({ searchParams }: Pick<PageProps<"/painel">, "searchPar
   return (
     <div className="flex flex-col gap-4">
       {notice ? (
-        <p role="status" className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">
+        <p role="status" className="rounded-md bg-success-soft px-3 py-2 text-sm text-success">
           {notice}
         </p>
       ) : null}
-      <h1 className="text-2xl font-semibold text-gray-900">
-        Olá, {member.fullName.split(" ")[0]}!
-      </h1>
-      <p className="text-gray-700">
+      <h1 className="text-2xl font-semibold text-ink">Olá, {member.fullName.split(" ")[0]}!</h1>
+      <p className="text-ink">
         Você está em <strong>{member.organizationName}</strong>. Os módulos do ERP aparecerão aqui.
       </p>
     </div>

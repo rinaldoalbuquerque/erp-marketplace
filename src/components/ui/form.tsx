@@ -15,8 +15,8 @@ export function Field({ label, name, error, hint, id, ...inputProps }: FieldProp
   const inputId = id ?? name;
   const describedBy = error ? `${inputId}-error` : hint ? `${inputId}-hint` : undefined;
   return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={inputId} className="text-sm font-medium text-gray-800">
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={inputId} className="text-sm font-medium text-ink">
         {label}
       </label>
       <input
@@ -24,17 +24,17 @@ export function Field({ label, name, error, hint, id, ...inputProps }: FieldProp
         name={name}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
-        className={`rounded-md border px-3 py-2 text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 ${
-          error ? "border-red-500" : "border-gray-300"
+        className={`h-10 rounded-lg border bg-surface px-3 text-ink transition-colors outline-none placeholder:text-muted/70 focus:border-brand focus:ring-3 focus:ring-brand/20 ${
+          error ? "border-danger" : "border-border hover:border-muted/60"
         }`}
         {...inputProps}
       />
       {error ? (
-        <p id={`${inputId}-error`} className="text-sm text-red-600">
+        <p id={`${inputId}-error`} className="text-sm text-danger">
           {error}
         </p>
       ) : hint ? (
-        <div id={`${inputId}-hint`} className="text-sm text-gray-500">
+        <div id={`${inputId}-hint`} className="text-sm text-muted">
           {hint}
         </div>
       ) : null}
@@ -54,7 +54,7 @@ export function SubmitButton({
     <button
       type="submit"
       disabled={pending}
-      className="rounded-md bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
+      className="h-10 rounded-lg bg-brand px-4 font-semibold text-on-brand transition-colors hover:bg-brand-hover disabled:cursor-wait disabled:opacity-60"
     >
       {pending ? pendingText : children}
     </button>
@@ -68,8 +68,10 @@ export function FormMessage({ state }: { state: FormState }) {
   return (
     <p
       role={isError ? "alert" : "status"}
-      className={`rounded-md px-3 py-2 text-sm ${
-        isError ? "bg-red-50 text-red-700" : "bg-green-50 text-green-800"
+      className={`rounded-lg border-l-4 px-3 py-2 text-sm ${
+        isError
+          ? "border-danger bg-danger-soft text-danger"
+          : "border-success bg-success-soft text-success"
       }`}
     >
       {state.message}

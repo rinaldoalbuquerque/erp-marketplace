@@ -41,7 +41,7 @@ export function LoginForm({ next, notice }: { next?: string; notice?: string }) 
         <SubmitButton pendingText="Entrando…">Entrar</SubmitButton>
       </form>
       {state.showResend ? (
-        <div className="border-t border-gray-200 pt-4">
+        <div className="border-t border-border pt-4">
           <ResendConfirmationForm defaultEmail={state.values?.email} />
         </div>
       ) : null}

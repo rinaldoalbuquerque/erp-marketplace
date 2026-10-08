@@ -14,13 +14,13 @@ export const metadata: Metadata = { title: "Criar conta" };
 export default function SignupPage() {
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold text-gray-900">Criar conta</h1>
-      <Suspense fallback={<p className="text-sm text-gray-500">Carregando…</p>}>
+      <h1 className="text-2xl font-semibold text-ink">Criar conta</h1>
+      <Suspense fallback={<p className="text-sm text-muted">Carregando…</p>}>
         <SignupGate />
       </Suspense>
-      <p className="text-center text-sm text-gray-600">
+      <p className="text-center text-sm text-muted">
         Já tem conta?{" "}
-        <Link href={ROUTES.login} className="text-blue-600 hover:underline">
+        <Link href={ROUTES.login} className="text-brand hover:underline">
           Entrar
         </Link>
       </p>
@@ -32,9 +32,7 @@ export default function SignupPage() {
 async function SignupGate() {
   await connection();
   if (!env.ALLOW_PUBLIC_SIGNUP) {
-    return (
-      <p className="rounded-md bg-gray-100 px-3 py-2 text-sm text-gray-700">{SIGNUP_CLOSED}</p>
-    );
+    return <p className="rounded-md bg-surface-2 px-3 py-2 text-sm text-ink">{SIGNUP_CLOSED}</p>;
   }
   return <SignupForm />;
 }

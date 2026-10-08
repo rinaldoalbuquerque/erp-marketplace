@@ -37,22 +37,20 @@ export function SideNav({ sections }: { sections: NavSection[] }) {
   const { close } = useMobileNav();
 
   return (
-    <nav aria-label="Menu principal" className="flex flex-col gap-5">
+    <nav aria-label="Menu principal" className="flex flex-col gap-6">
       {sections.map((section, index) => (
-        <div key={section.title ?? index} className="flex flex-col gap-1">
+        <div key={section.title ?? index} className="flex flex-col gap-0.5">
           {section.title ? (
-            <p className="px-3 pb-1 text-xs font-semibold tracking-wide text-gray-400 uppercase">
-              {section.title}
-            </p>
+            <p className="px-3 pb-1.5 text-xs font-medium text-sidebar-muted">{section.title}</p>
           ) : null}
           {section.items.map((item) => {
             const Icon = ICONS[item.icon];
             const content = (
               <>
-                <Icon className="size-4 shrink-0" aria-hidden="true" />
+                <Icon className="size-[18px] shrink-0" aria-hidden="true" />
                 <span className="flex-1">{item.label}</span>
                 {item.comingSoon ? (
-                  <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+                  <span className="rounded-full border border-sidebar-muted/30 px-2 py-px text-[10px] font-medium text-sidebar-muted">
                     em breve
                   </span>
                 ) : null}
@@ -63,7 +61,7 @@ export function SideNav({ sections }: { sections: NavSection[] }) {
               return (
                 <span
                   key={item.href}
-                  className="flex cursor-not-allowed items-center gap-3 rounded-md px-3 py-2 text-sm text-gray-400"
+                  className="flex cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-muted/80"
                   aria-disabled="true"
                   title="Módulo em construção"
                 >
@@ -73,16 +71,17 @@ export function SideNav({ sections }: { sections: NavSection[] }) {
             }
 
             const active = isActivePath(pathname, item.href);
+            // Active item: amber strip on the left, like a tag stuck to the menu.
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={close}
                 aria-current={active ? "page" : undefined}
-                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm ${
+                className={`relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
                   active
-                    ? "bg-blue-50 font-medium text-blue-700"
-                    : "text-gray-700 hover:bg-gray-100"
+                    ? "bg-sidebar-active font-semibold text-sidebar-ink before:absolute before:inset-y-1.5 before:-left-3 before:w-1 before:rounded-r-full before:bg-signal"
+                    : "text-sidebar-ink/85 hover:bg-sidebar-hover hover:text-sidebar-ink"
                 }`}
               >
                 {content}
