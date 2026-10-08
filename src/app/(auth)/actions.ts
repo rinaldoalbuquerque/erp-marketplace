@@ -2,11 +2,12 @@
 
 import { redirect } from "next/navigation";
 
-import { authErrorMessage, SIGNUP_CLOSED } from "@/lib/auth/error-messages";
+import { authErrorMessage, GENERIC_ERROR, SIGNUP_CLOSED } from "@/lib/auth/error-messages";
 import { readFields, type FormState } from "@/lib/auth/form-state";
 import { evaluatePassword } from "@/lib/auth/password-strength";
-import { ROUTES } from "@/lib/auth/routes";
-import { emailOnlySchema, fieldErrors, signupSchema } from "@/lib/auth/schemas";
+import { ROUTES, safeNextPath } from "@/lib/auth/routes";
+import { emailOnlySchema, fieldErrors, loginSchema, signupSchema } from "@/lib/auth/schemas";
+import { provisionUserInDatabase } from "@/server/auth/provisioning-store";
 import { isPwnedPassword } from "@/server/auth/pwned-password";
 import { env } from "@/server/env";
 import { createSupabaseServerClient } from "@/server/supabase";
@@ -98,4 +99,52 @@ export async function resendConfirmationAction(
       "Se houver um cadastro aguardando confirmação para esse e-mail, enviamos um novo link. Confira também a caixa de spam.",
     values: raw,
   };
+}
+
+export async function loginAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const raw = readFields(formData, ["email", "password", "next"]);
+  const values = { email: raw.email };
+  const parsed = loginSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { status: "error", fieldErrors: fieldErrors(parsed.error), values };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
+  if (error || !data.user) {
+    // Only reachable with the right password, so it doesn't reveal accounts.
+    if (error?.code === "email_not_confirmed") {
+      return { status: "error", message: authErrorMessage(error.code), values, showResend: true };
+    }
+    return { status: "error", message: authErrorMessage(error?.code), values };
+  }
+
+  // Retry provisioning in case it failed when the e-mail was confirmed. Idempotent.
+  let result;
+  try {
+    result = await provisionUserInDatabase({
+      userId: data.user.id,
+      metadata: data.user.user_metadata,
+      allowPublicSignup: env.ALLOW_PUBLIC_SIGNUP,
+    });
+  } catch (provisioningError) {
+    console.error("Provisioning failed on login", {
+      userId: data.user.id,
+      error: provisioningError instanceof Error ? provisioningError.message : "unknown",
+    });
+    await supabase.auth.signOut({ scope: "local" });
+    return { status: "error", message: GENERIC_ERROR, values };
+  }
+  if (result === "signup_closed" || result === "invalid_metadata") {
+    redirect(ROUTES.noAccess);
+  }
+
+  redirect(safeNextPath(raw.next));
+}
+
+export async function logoutAction(): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  // "local": ends this browser's session only.
+  await supabase.auth.signOut({ scope: "local" });
+  redirect(ROUTES.login);
 }
