@@ -18,6 +18,8 @@ import { ML_API_BASE, mlFetch, readErrorBody, type FetchFn } from "./http";
 // - Confirmed on a real MLB account (2026-10-08): search without status filter
 //   returns every status (active + paused + closed...); bulk body includes
 //   user_product_id, family_id, family_name, variations, seller_custom_field.
+//   With the seller's own token, available_quantity is the exact stock (checked
+//   against the ML panel), not the rounded ranges of public resources.
 // User Products: items with family_name != null are in the new model
 // (https://developers.mercadolivre.com.br/pt_br/user-products).
 

@@ -43,7 +43,6 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         href: "/mapeamento",
         icon: "mapping",
         permission: "listings.view",
-        comingSoon: true,
       },
       {
         label: "Pedidos",
