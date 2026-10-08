@@ -97,7 +97,8 @@ ERP para gerenciar marketplaces, começando pelo Mercado Livre, com foco em **pr
 - [x] Prisma + migrations; schema inicial
 - [x] Autenticação (seção 3.1) e organização automática no cadastro
   - Feito: cadastro (nome, e-mail, celular, senha ≥ 10 com medidor e checagem de senhas vazadas, aceite dos termos), confirmação por e-mail, criação automática de perfil + organização + owner, login, esqueci/redefinir senha, sair, páginas internas protegidas, `ALLOW_PUBLIC_SIGNUP`.
-  - Pendente: teste manual ponta a ponta na conta real; textos definitivos de Termos de Uso e Política de Privacidade (hoje provisórios); SMTP próprio (o e-mail padrão do Supabase só entrega para a equipe do projeto, e os modelos de e-mail só podem ser editados/traduzidos com SMTP próprio; hoje os e-mails chegam em inglês).
+  - Testado na conta real em 07/10/2026 (cadastro, confirmação, organização automática, login, sair, redefinir senha). Links de e-mail precisam ser abertos no mesmo navegador do cadastro/pedido (fluxo PKCE do modelo de e-mail padrão).
+  - Pendente: textos definitivos de Termos de Uso e Política de Privacidade (hoje provisórios); SMTP próprio (o e-mail padrão do Supabase só entrega para a equipe do projeto, e os modelos de e-mail só podem ser editados/traduzidos com SMTP próprio; hoje os e-mails chegam em inglês).
   - Ficou para depois: sair de todos os dispositivos, convite de funcionário, 2FA.
 - [ ] Perfis de acesso e camada de dados filtrando por organização
   - Já existe `requireMember()` (`src/server/auth/session.ts`), que devolve usuário + organização + papel: ponto de partida da camada de dados.
