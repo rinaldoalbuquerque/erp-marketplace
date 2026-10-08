@@ -82,7 +82,6 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         href: "/contas",
         icon: "accounts",
         permission: "marketplaceAccounts.manage",
-        comingSoon: true,
       },
       {
         label: "Configurações",
