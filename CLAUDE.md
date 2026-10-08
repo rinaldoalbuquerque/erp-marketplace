@@ -84,6 +84,8 @@ Notas técnicas:
 - `DATABASE_URL` (pooler, porta 6543) é usado pelo app; `DIRECT_URL` (porta 5432) pelas migrations.
 - Toda tabela nova no schema `public` precisa de `ENABLE ROW LEVEL SECURITY` na migration (sem policies), para o navegador não acessar via Data API do Supabase.
 - Variáveis de ambiente validadas em `src/server/env.ts`; código só do servidor usa `import "server-only"`.
+- Autenticação: toda página interna e toda Server Action começa com `requireMember()` (`src/server/auth/session.ts`) e filtra os dados pelo `organizationId` retornado. O `src/proxy.ts` é só a primeira camada. Leitura de sessão fica dentro de `<Suspense>` (Cache Components ligado).
+- URLs das páginas em português (`/entrar`, `/painel`), listadas em `src/lib/auth/routes.ts`.
 
 ## Estrutura de pastas (alvo)
 

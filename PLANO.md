@@ -95,8 +95,12 @@ ERP para gerenciar marketplaces, começando pelo Mercado Livre, com foco em **pr
 ### Fase 1 — Fundação
 - [x] Projeto Next.js + TypeScript, lint, typecheck, testes
 - [x] Prisma + migrations; schema inicial
-- [ ] Autenticação (seção 3.1) e organização automática no cadastro
+- [x] Autenticação (seção 3.1) e organização automática no cadastro
+  - Feito: cadastro (nome, e-mail, celular, senha ≥ 10 com medidor e checagem de senhas vazadas, aceite dos termos), confirmação por e-mail, criação automática de perfil + organização + owner, login, esqueci/redefinir senha, sair, páginas internas protegidas, `ALLOW_PUBLIC_SIGNUP`.
+  - Pendente: teste manual ponta a ponta na conta real; textos definitivos de Termos de Uso e Política de Privacidade (hoje provisórios); SMTP próprio (o e-mail padrão do Supabase só entrega para a equipe do projeto).
+  - Ficou para depois: sair de todos os dispositivos, convite de funcionário, 2FA.
 - [ ] Perfis de acesso e camada de dados filtrando por organização
+  - Já existe `requireMember()` (`src/server/auth/session.ts`), que devolve usuário + organização + papel: ponto de partida da camada de dados.
 - [ ] Layout base e menu lateral
 - [ ] Produtos e SKUs (com campos fiscais) e estoque com movimentações
 
@@ -146,7 +150,8 @@ ERP para gerenciar marketplaces, começando pelo Mercado Livre, com foco em **pr
 
 Anotar aqui tudo que for descoberto olhando outros sistemas.
 
--
+- Links de e-mail (confirmação/redefinição) podem ser "consumidos" por antivírus de e-mail que abrem links automaticamente (ex.: Outlook). Se acontecer, trocar o link por uma página com botão "Confirmar".
+- Tela "Minha conta": editar nome/celular, trocar senha, sair de todos os dispositivos.
 
 ## 8. Referências
 
