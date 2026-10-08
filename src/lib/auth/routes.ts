@@ -7,6 +7,7 @@ export const ROUTES = {
   forgotPassword: "/esqueci-a-senha",
   resetPassword: "/redefinir-senha",
   noAccess: "/sem-acesso",
+  forbidden: "/sem-permissao",
   terms: "/termos",
   privacy: "/privacidade",
   emailConfirm: "/auth/confirm",

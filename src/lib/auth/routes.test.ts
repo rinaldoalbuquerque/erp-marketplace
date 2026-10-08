@@ -23,6 +23,10 @@ describe("resolveAccessRedirect", () => {
     expect(resolveAccessRedirect("/redefinir-senha", false)).not.toBeNull();
   });
 
+  it("requires login for the no-permission page (internal)", () => {
+    expect(resolveAccessRedirect("/sem-permissao", false)).not.toBeNull();
+  });
+
   it("sends logged-in users away from login and signup", () => {
     expect(resolveAccessRedirect("/entrar", true)).toBe("/painel");
     expect(resolveAccessRedirect("/cadastro", true)).toBe("/painel");

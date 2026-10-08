@@ -4,11 +4,10 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { cache } from "react";
 
+import { can, type Permission, type Role } from "@/domain/auth/permissions";
 import { ROUTES } from "@/lib/auth/routes";
 import { db } from "@/server/db";
 import { createSupabaseServerClient } from "@/server/supabase";
-
-import type { MembershipRole } from "@/generated/prisma/client";
 
 export type AuthUser = {
   id: string;
@@ -20,7 +19,7 @@ export type CurrentMember = {
   fullName: string;
   organizationId: string;
   organizationName: string;
-  role: MembershipRole;
+  role: Role;
 };
 
 /**
@@ -69,3 +68,14 @@ export const requireMember = cache(async (): Promise<CurrentMember> => {
     role: membership.role,
   };
 });
+
+/**
+ * Logged-in member who has `permission`; otherwise sends them to the
+ * "no permission" page. Use at the top of protected pages and Server Actions:
+ *   const member = await requirePermission("listings.delete");
+ */
+export async function requirePermission(permission: Permission): Promise<CurrentMember> {
+  const member = await requireMember();
+  if (!can(member.role, permission)) redirect(ROUTES.forbidden);
+  return member;
+}
