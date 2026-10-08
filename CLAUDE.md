@@ -76,7 +76,7 @@ ERP para gerenciar anúncios, estoque e pedidos em marketplaces.
 | `npm run lint` / `npm run typecheck` / `npm test` | Cada verificação separada |
 | `npm run test:db` | Testes contra o banco do `.env` (`*.db.test.ts`, só leitura) |
 | `npm run format` | Formata o código com Prettier |
-| `npm run db:migrate` | Cria/aplica migration (`npx prisma migrate dev --create-only --name x` para revisar o SQL antes) |
+| `npm run db:migrate` | Cria/aplica migration (`npx prisma migrate dev --create-only --name x` para revisar o SQL antes). **Depois, reiniciar o `npm run dev`**: o cliente do Prisma fica em cache no servidor de desenvolvimento e não enxerga tabelas novas |
 | `npm run db:generate` | Regenera o cliente do Prisma |
 | `npm run db:studio` | Abre o Prisma Studio para ver os dados |
 
@@ -89,6 +89,8 @@ Notas técnicas:
 - Permissões: tabela única em `src/domain/auth/permissions.ts` (`can(role, permission)`). Esconder botão é só visual; quem protege é `requirePermission` no servidor.
 - **Dados de negócio só via `getTenantContext()` / `tenantDb()`** (`src/server/tenant/`), que filtra tudo pela organização. O `db` "livre" (`src/server/db.ts`) fica restrito a rotinas internas (auth, provisionamento, jobs). Toda tabela nova com `organizationId` entra em `TENANT_MODELS` (`src/server/tenant/scope.ts`; um teste falha se esquecer). Com o `tenantDb`: sem nested writes e sem SQL bruto.
 - URLs das páginas em português (`/entrar`, `/painel`), listadas em `src/lib/auth/routes.ts`.
+- **Estoque só muda por `adjustStock()`** (`src/server/stock/stock-service.ts`), que grava saldo + movimentação na mesma transação. Nunca alterar `stockOnHand` direto. Eventos externos (vendas do ML) sempre com `idempotencyKey`.
+- Tabelas filhas de negócio usam chave estrangeira composta `(organizationId, xId)` → `(organizationId, id)` do pai, para o banco impedir vínculo entre empresas.
 - Menu lateral: itens em `src/lib/navigation.ts` (cada um com a permissão exigida; tirar o `comingSoon` quando o módulo existir).
 - Tema "Expedição" (claro/escuro): usar **só os tokens de cor** de `src/app/globals.css` (`bg-surface`, `text-ink`, `text-muted`, `bg-brand`, `text-signal`...), nunca cores fixas como `gray-500` ou `blue-600`. Âmbar (`signal`) é reservado para o que pede atenção. Títulos usam a fonte condensada (`font-display`).
 

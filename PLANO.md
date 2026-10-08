@@ -108,7 +108,11 @@ ERP para gerenciar marketplaces, começando pelo Mercado Livre, com foco em **pr
 - [x] Layout base e menu lateral
   - Menu filtrado por perfil (módulos futuros aparecem como "em breve"), menu ☰ no celular, topo com empresa, usuário, perfil e Sair.
   - Tema "Expedição" (verde-petróleo + âmbar, fontes IBM Plex) com botão claro/escuro/sistema, salvo no navegador.
-- [ ] Produtos e SKUs (com campos fiscais) e estoque com movimentações
+- [x] Produtos e SKUs (com campos fiscais) e estoque com movimentações
+  - Produto → SKUs (variações) com EAN, NCM, CEST, origem, unidade, CFOP, peso/medidas, localização e custo (custo só para quem vê o financeiro). Produtos são arquivados, nunca apagados.
+  - Estoque por SKU com histórico (entrada, saída, contagem; venda e devolução prontas para a Fase 3). Ajuste atômico no banco: saldo nunca negativo em ajustes manuais, vendas podem negativar. Chave de idempotência por movimentação.
+  - Chaves compostas (organização + id) impedem, no próprio banco, ligar SKU/movimentação a dados de outra empresa.
+  - Testado: concorrência e idempotência contra o banco (`npm run test:db`, em empresa temporária) e teste manual em 08/10/2026.
 
 ### Fase 2 — Conexão com o ML e anúncios
 - [ ] **2.0** Conectar contas do ML (OAuth, refresh automático, tokens criptografados), contas ilimitadas; detectar tipo de modelo (tradicional/UP)
@@ -158,6 +162,10 @@ Anotar aqui tudo que for descoberto olhando outros sistemas.
 
 - Links de e-mail (confirmação/redefinição) podem ser "consumidos" por antivírus de e-mail que abrem links automaticamente (ex.: Outlook). Se acontecer, trocar o link por uma página com botão "Confirmar".
 - Tela "Minha conta": editar nome/celular, trocar senha, sair de todos os dispositivos.
+- Kits (SKU composto por outros SKUs, ex.: "kit 3 camisetas"), baixando o estoque dos componentes.
+- Importar produtos/SKUs por planilha.
+- Estoque por depósito (mais de um local) e alerta de estoque baixo.
+- Validar NCM/CEST contra as tabelas oficiais.
 
 ## 8. Referências
 
