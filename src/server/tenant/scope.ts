@@ -10,11 +10,15 @@
  * against prisma/schema.prisma, so a new business table can't be forgotten.
  */
 export const TENANT_MODELS: ReadonlySet<string> = new Set([
+  "Listing",
+  "ListingVariation",
   "MarketplaceAccount",
   "Membership",
   "Product",
   "Sku",
+  "SkuListingMapping",
   "StockMovement",
+  "SyncJob",
 ]);
 
 export class TenantScopeError extends Error {

@@ -30,6 +30,10 @@ model Organization {
   skus                Sku[]
   stockMovements      StockMovement[]
   marketplaceAccounts MarketplaceAccount[]
+  listings            Listing[]
+  listingVariations   ListingVariation[]
+  skuListingMappings  SkuListingMapping[]
+  syncJobs            SyncJob[]
 
   @@map("organizations")
 }
@@ -47,6 +51,8 @@ model Profile {
   memberships         Membership[]
   stockMovements      StockMovement[]
   marketplaceAccounts MarketplaceAccount[]
+  skuListingMappings  SkuListingMapping[]
+  syncJobs            SyncJob[]
 
   @@map("profiles")
 }
@@ -144,11 +150,12 @@ model Sku {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   // Composite key: the product must belong to the same organization (enforced by the database).
   // NoAction (checked at end of statement) so deleting an organization cascades cleanly.
-  product        Product         @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: NoAction)
-  stockMovements StockMovement[]
+  product         Product             @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: NoAction)
+  stockMovements  StockMovement[]
+  listingMappings SkuListingMapping[]
 
   @@unique([organizationId, id])
   @@unique([organizationId, code])
@@ -239,10 +246,159 @@ model MarketplaceAccount {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   connectedBy  Profile?     @relation(fields: [connectedById], references: [id], onDelete: SetNull)
+  listings     Listing[]
+  syncJobs     SyncJob[]
 
   /// One marketplace account belongs to a single organization (SaaS-safe).
   @@unique([marketplace, externalUserId])
   @@unique([organizationId, id])
   @@index([organizationId])
   @@map("marketplace_accounts")
+}
+
+/// A listing imported from a marketplace account (Phase 2A: read-only copy).
+/// Screens read from here, never from the marketplace API (CLAUDE.md).
+model Listing {
+  id                   String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId       String       @map("organization_id") @db.Uuid
+  marketplaceAccountId String       @map("marketplace_account_id") @db.Uuid
+  marketplace          Marketplace
+  /// Marketplace id, e.g. MLB1234567890
+  externalId           String       @map("external_id")
+  title                String
+  /// Raw marketplace status (ML: active, paused, closed, under_review...)
+  status               String
+  subStatus            String[]     @default([]) @map("sub_status")
+  priceCents           Int?         @map("price_cents")
+  currency             String?
+  availableQuantity    Int?         @map("available_quantity")
+  soldQuantity         Int?         @map("sold_quantity")
+  permalink            String?
+  thumbnailUrl         String?      @map("thumbnail_url")
+  categoryId           String?      @map("category_id")
+  listingTypeId        String?      @map("listing_type_id")
+  condition            String?
+  listingModel         ListingModel @default(unknown) @map("listing_model")
+  /// ML User Products
+  userProductId        String?      @map("user_product_id")
+  familyId             String?      @map("family_id")
+  familyName           String?      @map("family_name")
+  /// Seller SKU in the marketplace (ML: seller_custom_field or SELLER_SKU attribute)
+  sellerSku            String?      @map("seller_sku")
+  externalUpdatedAt    DateTime?    @map("external_updated_at") @db.Timestamptz(6)
+  /// Full marketplace payload, base for the canonical model and editing (2B).
+  raw                  Json
+  syncedAt             DateTime     @map("synced_at") @db.Timestamptz(6)
+  createdAt            DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account      MarketplaceAccount  @relation(fields: [organizationId, marketplaceAccountId], references: [organizationId, id], onDelete: NoAction)
+  variations   ListingVariation[]
+  mappings     SkuListingMapping[]
+
+  @@unique([marketplaceAccountId, externalId])
+  @@unique([organizationId, id])
+  @@index([organizationId, status])
+  @@index([organizationId, marketplaceAccountId])
+  @@index([organizationId, familyId])
+  @@map("listings")
+}
+
+/// Variation of a traditional listing (ML "variations" array).
+model ListingVariation {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId    String   @map("organization_id") @db.Uuid
+  listingId         String   @map("listing_id") @db.Uuid
+  /// Marketplace variation id (as text)
+  externalId        String   @map("external_id")
+  /// [{ "name": "Cor", "value": "Azul" }, ...]
+  attributes        Json
+  priceCents        Int?     @map("price_cents")
+  availableQuantity Int?     @map("available_quantity")
+  soldQuantity      Int?     @map("sold_quantity")
+  sellerSku         String?  @map("seller_sku")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  listing      Listing             @relation(fields: [organizationId, listingId], references: [organizationId, id], onDelete: Cascade)
+  mappings     SkuListingMapping[]
+
+  @@unique([listingId, externalId])
+  @@unique([organizationId, id])
+  @@map("listing_variations")
+}
+
+/// Links an ERP SKU to a listing (or one of its variations). Stock flows from the SKU.
+model SkuListingMapping {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId     String   @map("organization_id") @db.Uuid
+  skuId              String   @map("sku_id") @db.Uuid
+  listingId          String   @map("listing_id") @db.Uuid
+  listingVariationId String?  @map("listing_variation_id") @db.Uuid
+  /// Variation id, or "" when the whole listing is linked. Makes "one SKU per
+  /// listing/variation" enforceable by a unique index (NULLs would not collide).
+  variationKey       String   @default("") @map("variation_key")
+  createdById        String?  @map("created_by_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sku          Sku               @relation(fields: [organizationId, skuId], references: [organizationId, id], onDelete: NoAction)
+  listing      Listing           @relation(fields: [organizationId, listingId], references: [organizationId, id], onDelete: Cascade)
+  variation    ListingVariation? @relation(fields: [organizationId, listingVariationId], references: [organizationId, id], onDelete: Cascade)
+  createdBy    Profile?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([listingId, variationKey])
+  @@index([organizationId, skuId])
+  @@map("sku_listing_mappings")
+}
+
+enum SyncJobType {
+  import_listings
+
+  @@map("sync_job_type")
+}
+
+enum SyncJobStatus {
+  queued
+  running
+  /// Stopped at the time budget; resumes from pendingIds.
+  paused
+  completed
+  failed
+
+  @@map("sync_job_status")
+}
+
+/// Background job with progress, report and resume (CLAUDE.md: batch operations).
+model SyncJob {
+  id                   String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId       String        @map("organization_id") @db.Uuid
+  marketplaceAccountId String        @map("marketplace_account_id") @db.Uuid
+  type                 SyncJobType
+  status               SyncJobStatus @default(queued)
+  total                Int?
+  processed            Int           @default(0)
+  createdCount         Int           @default(0) @map("created_count")
+  updatedCount         Int           @default(0) @map("updated_count")
+  failedCount          Int           @default(0) @map("failed_count")
+  /// External ids still to process (resume point)
+  pendingIds           Json?         @map("pending_ids")
+  /// First errors: [{ "id": "MLB...", "message": "..." }]
+  errors               Json          @default("[]")
+  lastError            String?       @map("last_error")
+  startedById          String?       @map("started_by_id") @db.Uuid
+  startedAt            DateTime?     @map("started_at") @db.Timestamptz(6)
+  heartbeatAt          DateTime?     @map("heartbeat_at") @db.Timestamptz(6)
+  finishedAt           DateTime?     @map("finished_at") @db.Timestamptz(6)
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account      MarketplaceAccount @relation(fields: [organizationId, marketplaceAccountId], references: [organizationId, id], onDelete: NoAction)
+  startedBy    Profile?           @relation(fields: [startedById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, marketplaceAccountId, createdAt])
+  @@map("sync_jobs")
 }
