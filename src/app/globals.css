@@ -1,20 +1,141 @@
 @import "tailwindcss";
 
-/* Light theme only for now; a dark theme can come with the base layout task. */
+/*
+ * Theme "Expedição": petrol green brand, amber signal for things that need
+ * attention, calm neutrals. Colors are semantic tokens (bg-surface, text-ink...)
+ * so components never hard-code a palette; each theme redefines the values.
+ *
+ * Theme choice: <html data-theme="light|dark"> is set before paint by the script
+ * in src/lib/theme.ts. Without JavaScript, the OS preference applies.
+ */
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+  --bg: #f5f7f6;
+  --surface: #ffffff;
+  --surface-2: #eef2f1;
+  --border: #dce3e1;
+  --ink: #17201f;
+  --muted: #5b6b69;
+  --brand: #0f5c56;
+  --brand-hover: #0b4a45;
+  --on-brand: #ffffff;
+  --sidebar: #0b3b38;
+  --sidebar-ink: #e3efec;
+  --sidebar-muted: #8fb3ad;
+  --sidebar-hover: #134b47;
+  --sidebar-active: #11504b;
+  --signal: #e8a33d;
+  --signal-soft: #fbf0dc;
+  --signal-ink: #6b4708;
+  --danger: #b42318;
+  --danger-soft: #fdecea;
+  --success: #1e7a4c;
+  --success-soft: #e3f4ea;
+  --ring: #2c8c83;
+}
+
+/* Dark values are repeated below for the no-JavaScript fallback; keep both in sync. */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e1514;
+  --surface: #141d1c;
+  --surface-2: #1b2625;
+  --border: #26332f;
+  --ink: #e6eeec;
+  --muted: #93a3a0;
+  --brand: #3fb3a6;
+  --brand-hover: #5cc4b8;
+  --on-brand: #062320;
+  --sidebar: #0b2a28;
+  --sidebar-ink: #dcebe8;
+  --sidebar-muted: #7fa39d;
+  --sidebar-hover: #12403c;
+  --sidebar-active: #134743;
+  --signal: #f0b457;
+  --signal-soft: #3a2a10;
+  --signal-ink: #f6cf8c;
+  --danger: #f07070;
+  --danger-soft: #3a1615;
+  --success: #4cc38a;
+  --success-soft: #12301f;
+  --ring: #3fb3a6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --bg: #0e1514;
+    --surface: #141d1c;
+    --surface-2: #1b2625;
+    --border: #26332f;
+    --ink: #e6eeec;
+    --muted: #93a3a0;
+    --brand: #3fb3a6;
+    --brand-hover: #5cc4b8;
+    --on-brand: #062320;
+    --sidebar: #0b2a28;
+    --sidebar-ink: #dcebe8;
+    --sidebar-muted: #7fa39d;
+    --sidebar-hover: #12403c;
+    --sidebar-active: #134743;
+    --signal: #f0b457;
+    --signal-soft: #3a2a10;
+    --signal-ink: #f6cf8c;
+    --danger: #f07070;
+    --danger-soft: #3a1615;
+    --success: #4cc38a;
+    --success-soft: #12301f;
+    --ring: #3fb3a6;
+  }
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-on-brand: var(--on-brand);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-ink: var(--sidebar-ink);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-signal: var(--signal);
+  --color-signal-soft: var(--signal-soft);
+  --color-signal-ink: var(--signal-ink);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-ring: var(--ring);
+
+  --font-sans: var(--font-plex), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-plex-condensed), var(--font-plex), ui-sans-serif, sans-serif;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+@layer base {
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
 }
