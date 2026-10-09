@@ -11,6 +11,7 @@
  */
 export const TENANT_MODELS: ReadonlySet<string> = new Set([
   "Listing",
+  "ListingEdit",
   "ListingVariation",
   "MarketplaceAccount",
   "Membership",

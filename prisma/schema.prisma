@@ -34,6 +34,7 @@ model Organization {
   listingVariations   ListingVariation[]
   skuListingMappings  SkuListingMapping[]
   syncJobs            SyncJob[]
+  listingEdits        ListingEdit[]
 
   @@map("organizations")
 }
@@ -53,6 +54,7 @@ model Profile {
   marketplaceAccounts MarketplaceAccount[]
   skuListingMappings  SkuListingMapping[]
   syncJobs            SyncJob[]
+  listingEdits        ListingEdit[]
 
   @@map("profiles")
 }
@@ -227,6 +229,8 @@ model MarketplaceAccount {
   siteId         String?                  @map("site_id")
   listingModel   ListingModel             @default(unknown) @map("listing_model")
   status         MarketplaceAccountStatus @default(active)
+  /// The ERP may change listings of this account (off by default; the owner turns it on).
+  allowWrites    Boolean                  @default(false) @map("allow_writes")
 
   /// AES-256-GCM encrypted (src/server/crypto). Never logged or shown.
   accessTokenEncrypted  String?   @map("access_token_encrypted")
@@ -296,6 +300,7 @@ model Listing {
   account      MarketplaceAccount  @relation(fields: [organizationId, marketplaceAccountId], references: [organizationId, id], onDelete: NoAction)
   variations   ListingVariation[]
   mappings     SkuListingMapping[]
+  edits        ListingEdit[]
 
   @@unique([marketplaceAccountId, externalId])
   @@unique([organizationId, id])
@@ -401,4 +406,51 @@ model SyncJob {
 
   @@index([organizationId, marketplaceAccountId, createdAt])
   @@map("sync_jobs")
+}
+
+/// Category technical sheet (attributes) cached from the marketplace for 24h.
+/// Public marketplace metadata, the same for every organization: no
+/// organization_id; read only by server code (src/server/listings/categories.ts).
+model MarketplaceCategory {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  marketplace Marketplace
+  categoryId  String      @map("category_id")
+  /// Neutral attribute definitions (src/domain/listings/attributes.ts)
+  attributes  Json
+  fetchedAt   DateTime    @map("fetched_at") @db.Timestamptz(6)
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([marketplace, categoryId])
+  @@map("marketplace_categories")
+}
+
+enum ListingEditStatus {
+  success
+  /// Saved, but the marketplace ignored part of it (e.g. price under automation)
+  partial
+  failed
+
+  @@map("listing_edit_status")
+}
+
+/// History of every change the ERP sent to a marketplace listing.
+model ListingEdit {
+  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String            @map("organization_id") @db.Uuid
+  listingId      String            @map("listing_id") @db.Uuid
+  userId         String?           @map("user_id") @db.Uuid
+  /// [{ "field": "price", "before": ..., "after": ... }]
+  changes        Json
+  status         ListingEditStatus
+  /// Message shown to the user (marketplace errors/warnings translated)
+  message        String?
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  listing      Listing      @relation(fields: [organizationId, listingId], references: [organizationId, id], onDelete: Cascade)
+  user         Profile?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, listingId, createdAt])
+  @@map("listing_edits")
 }
