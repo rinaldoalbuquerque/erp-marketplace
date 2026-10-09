@@ -15,6 +15,7 @@ import { catchUpInBackground } from "@/server/orders/schedule";
 import { getTenantContext } from "@/server/tenant/tenant-db";
 
 import { fetchOrdersNowAction } from "./actions";
+import { INVOICE_FORM_ID, IssueInvoicesBar } from "./issue-invoices-bar";
 import { LABELS_FORM_ID, PrintLabelsBar } from "./print-labels-bar";
 
 export const metadata: Metadata = { title: "Pedidos" };
@@ -78,10 +79,11 @@ async function Orders({ searchParams }: Pick<PageProps<"/pedidos">, "searchParam
   const accountParam = param(params.conta);
   const accountId = z.uuid().safeParse(accountParam).success ? accountParam : null;
   const page = Math.max(1, Number(param(params.pagina)) || 1);
-  const [{ orders, total, tabCounts, accounts, pageCount, now }] = await Promise.all([
-    listOrders(tdb, { search, tab, accountId, page }),
-    catchUpInBackground(member.organizationId),
-  ]);
+  const [{ orders, lastInvoiceError, total, tabCounts, accounts, pageCount, now }] =
+    await Promise.all([
+      listOrders(tdb, { search, tab, accountId, page }),
+      catchUpInBackground(member.organizationId),
+    ]);
   const canPrint = can(member.role, "orders.fulfill");
 
   const href = (changes: { aba?: OrderTab; pagina?: number; conta?: string | null }) => {
@@ -97,8 +99,16 @@ async function Orders({ searchParams }: Pick<PageProps<"/pedidos">, "searchParam
     return text ? `/pedidos?${text}` : "/pedidos";
   };
   const current = href({ pagina: page });
-  const printable = (order: (typeof orders)[number]) => canPrint && canPrintLabel(order);
-  const showPrintBar = canPrint && orders.some((order) => canPrintLabel(order));
+  const canIssue = can(member.role, "invoices.issue");
+  type Row = (typeof orders)[number];
+  const printable = (order: Row) => canPrint && canPrintLabel(order);
+  const issuable = (order: Row) =>
+    canIssue && order.stage === "invoice_pending" && order.invoice === null;
+  // The "Aguardando NF" tab selects orders to invoice; the others select labels.
+  const invoiceMode = tab === "aguardando-nf";
+  const showInvoiceBar = invoiceMode && orders.some(issuable);
+  const showPrintBar = !invoiceMode && canPrint && orders.some((order) => canPrintLabel(order));
+  const showSelection = showInvoiceBar || showPrintBar;
 
   return (
     <>
@@ -203,6 +213,7 @@ async function Orders({ searchParams }: Pick<PageProps<"/pedidos">, "searchParam
       </form>
 
       {showPrintBar ? <PrintLabelsBar back={current} /> : null}
+      {showInvoiceBar ? <IssueInvoicesBar /> : null}
 
       {orders.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-surface p-10 text-center">
@@ -220,7 +231,7 @@ async function Orders({ searchParams }: Pick<PageProps<"/pedidos">, "searchParam
           <table className="w-full text-sm">
             <thead className="border-b border-border text-left text-muted">
               <tr>
-                {showPrintBar ? (
+                {showSelection ? (
                   <th className="w-10 px-4 py-3">
                     <span className="sr-only">Marcar</span>
                   </th>
@@ -240,14 +251,14 @@ async function Orders({ searchParams }: Pick<PageProps<"/pedidos">, "searchParam
                   order.dispatchBy.getTime() - now < 24 * 60 * 60 * 1000;
                 return (
                   <tr key={order.id} className="border-b border-border align-top last:border-0">
-                    {showPrintBar ? (
+                    {showSelection ? (
                       <td className="px-4 py-3">
                         <input
                           type="checkbox"
                           name="orderIds"
                           value={order.id}
-                          form={LABELS_FORM_ID}
-                          disabled={!printable(order)}
+                          form={invoiceMode ? INVOICE_FORM_ID : LABELS_FORM_ID}
+                          disabled={invoiceMode ? !issuable(order) : !printable(order)}
                           aria-label={`Marcar pedido ${order.externalId}`}
                           className="size-4 accent-brand disabled:opacity-30"
                         />
@@ -309,6 +320,14 @@ async function Orders({ searchParams }: Pick<PageProps<"/pedidos">, "searchParam
                           Etiqueta libera em {DATE_TIME.format(order.labelAvailableAt)}
                         </p>
                       ) : null}
+                      <InvoiceInfo
+                        invoice={order.invoice}
+                        lastError={
+                          order.invoice
+                            ? null
+                            : (lastInvoiceError.get(order.packId ?? order.externalId) ?? null)
+                        }
+                      />
                       {order.trackingNumber ? (
                         <p className="text-xs text-muted tabular-nums">
                           Rastreio {order.trackingNumber}
@@ -371,4 +390,49 @@ function StockBadge({ status, note }: { status: ItemStockStatus; note: string | 
       {status === "not_applicable" && note ? <span className="ml-2 text-muted">{note}</span> : null}
     </p>
   );
+}
+
+function InvoiceInfo({
+  invoice,
+  lastError,
+}: {
+  invoice: {
+    id: string;
+    number: number | null;
+    series: string | null;
+    status: string;
+    danfePath: string | null;
+    xmlPath: string | null;
+  } | null;
+  lastError: string | null;
+}) {
+  if (invoice) {
+    return (
+      <p className="text-xs text-muted">
+        NF {invoice.number ?? "—"}
+        {invoice.series ? ` série ${invoice.series}` : ""}
+        {invoice.status !== "authorized" ? ` (${invoice.status})` : ""}
+        {invoice.danfePath ? (
+          <>
+            {" · "}
+            <a href={`/pedidos/notas/${invoice.id}/danfe`} className="text-brand hover:underline">
+              DANFE
+            </a>
+          </>
+        ) : null}
+        {invoice.xmlPath ? (
+          <>
+            {" · "}
+            <a href={`/pedidos/notas/${invoice.id}/xml`} className="text-brand hover:underline">
+              XML
+            </a>
+          </>
+        ) : null}
+      </p>
+    );
+  }
+  if (lastError) {
+    return <p className="text-xs text-signal-ink">Última tentativa de NF: {lastError}</p>;
+  }
+  return null;
 }

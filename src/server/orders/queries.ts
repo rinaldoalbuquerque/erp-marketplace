@@ -100,6 +100,16 @@ export async function listOrders(
         slaStatus: true,
         dateCreated: true,
         account: { select: { nickname: true } },
+        invoice: {
+          select: {
+            id: true,
+            number: true,
+            series: true,
+            status: true,
+            danfePath: true,
+            xmlPath: true,
+          },
+        },
         items: {
           orderBy: { createdAt: "asc" },
           select: {
@@ -120,6 +130,24 @@ export async function listOrders(
     }),
   ]);
 
+  // Last refused/unknown invoice attempt of the carts on this page (shown on the row).
+  const packKeys = orders
+    .filter((order) => !order.invoice)
+    .map((order) => order.packId ?? order.externalId);
+  const failedAttempts = packKeys.length
+    ? await tdb.invoice.findMany({
+        where: { packKey: { in: packKeys }, status: "error" },
+        orderBy: { createdAt: "desc" },
+        select: { packKey: true, errorMessage: true, createdAt: true },
+      })
+    : [];
+  const lastInvoiceError = new Map<string, string>();
+  for (const attempt of failedAttempts) {
+    if (!lastInvoiceError.has(attempt.packKey)) {
+      lastInvoiceError.set(attempt.packKey, attempt.errorMessage ?? "Emissão recusada.");
+    }
+  }
+
   const stageCounts = new Map(byStage.map((row) => [row.stage, row._count._all]));
   const tabCounts = Object.fromEntries(
     (Object.keys(ORDER_TABS) as OrderTab[]).map((key) => {
@@ -136,6 +164,7 @@ export async function listOrders(
 
   return {
     orders,
+    lastInvoiceError,
     total,
     tabCounts,
     accounts,
