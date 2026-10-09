@@ -20,6 +20,8 @@ import {
 import { enqueueForSkus } from "@/server/stock-sync/push-service";
 import { tenantDb } from "@/server/tenant/tenant-db";
 
+import { syncInvoicesForShipment, type FiscalDeps } from "@/server/fiscal/invoice-service";
+
 import { saveOrder, type OrderAccount } from "./order-service";
 import { refreshShipment, shipmentsToRefresh } from "./shipment-service";
 
@@ -32,7 +34,7 @@ import { refreshShipment, shipmentsToRefresh } from "./shipment-service";
 // - The body is never trusted as data: only `resource` says what to fetch, with
 //   our own token, and only for accounts connected to the ERP.
 
-export type OrderSyncDeps = TokenDeps & {
+export type OrderSyncDeps = FiscalDeps & {
   now?: () => Date;
   connectorFor?: (marketplace: MarketplaceId) => MarketplaceConnector;
 };
@@ -105,6 +107,24 @@ async function applyOrder(
     await enqueueForSkus(tenantDb(account.organizationId), account.organizationId, changedSkuIds);
   }
   return changedSkuIds.length > 0;
+}
+
+/** Shipment refresh, then its invoice when the shipment is past the invoice step. */
+async function refreshShipmentAndInvoice(
+  account: OrderAccount & { externalUserId: string },
+  connector: MarketplaceConnector,
+  token: string,
+  shippingId: string,
+  now: Date,
+  deps: OrderSyncDeps,
+) {
+  await refreshShipment(account, connector, token, shippingId, now);
+  try {
+    await syncInvoicesForShipment(account, token, shippingId, deps);
+  } catch (error) {
+    // The invoice is looked up again later; only a lost authorization stops here.
+    if (!(error instanceof MarketplaceApiError)) throw error;
+  }
 }
 
 export type NotificationRoundResult = {
@@ -213,12 +233,12 @@ export async function processNotifications(
       const token = await getAccessToken(account.organizationId, account.id, deps);
       const connector = connectorFor(account.marketplace);
       if (note.topic === SHIPMENT_TOPIC) {
-        await refreshShipment(account, connector, token, match[1]!, now());
+        await refreshShipmentAndInvoice(account, connector, token, match[1]!, now(), deps);
       } else {
         const order = await connector.getOrder(token, match[1]!);
         if (await applyOrder(account, order, now())) organizations.add(account.organizationId);
         if (order.shippingId) {
-          await refreshShipment(account, connector, token, order.shippingId, now());
+          await refreshShipmentAndInvoice(account, connector, token, order.shippingId, now(), deps);
         }
       }
       await finish({ status: "done", processedAt: now(), lastError: null });
@@ -307,7 +327,7 @@ export async function catchUpOrders(
     const connector = connectorFor(account.marketplace);
     for (const shippingId of shippingIds) {
       try {
-        await refreshShipment(account, connector, token, shippingId, to);
+        await refreshShipmentAndInvoice(account, connector, token, shippingId, to, deps);
       } catch (error) {
         // One unreadable shipment must not stop the catch-up; auth problems do.
         if (!(

@@ -15,6 +15,7 @@ import {
 } from "@/server/orders/order-sync";
 import { tenantDb } from "@/server/tenant/tenant-db";
 import { fakeConnector } from "@/test/fake-connector";
+import { fakeFiscalProvider } from "@/test/fake-fiscal";
 
 // Real database (`npm run test:db`) in a TEMPORARY organization deleted at the end.
 // Mercado Livre is simulated: nothing is sent to it.
@@ -235,6 +236,7 @@ describe("orders against the database", () => {
     const result = await processNotifications(new Date(Date.now() + 60_000), {
       key,
       connectorFor: () => connector,
+      providerFor: () => fakeFiscalProvider(),
     });
     expect(asked).toEqual([sale.externalId]);
     expect(result).toMatchObject({ done: 1, ignored: 1, organizations: [organizationId] });
@@ -262,6 +264,7 @@ describe("orders against the database", () => {
     const result = await processNotifications(new Date(Date.now() + 60_000), {
       key,
       connectorFor: () => connector,
+      providerFor: () => fakeFiscalProvider(),
     });
     expect(result.retrying).toBe(1);
     const row = await db.marketplaceNotification.findFirstOrThrow({ where: { resource } });
@@ -284,6 +287,7 @@ describe("orders against the database", () => {
       key,
       now: () => now,
       connectorFor: () => connector,
+      providerFor: () => fakeFiscalProvider(),
     });
     expect(result).toEqual({ status: "ok", orders: 1, stockChanged: true });
     expect(window!.to).toEqual(now);
@@ -318,7 +322,7 @@ describe("shipments against the database", () => {
         return { expectedDate: new Date("2026-10-10T21:00:00.000Z"), status: "on_time" };
       },
     });
-    const deps = { key, connectorFor: () => connector };
+    const deps = { key, connectorFor: () => connector, providerFor: () => fakeFiscalProvider() };
     for (const sale of [first, second]) {
       await recordNotification("mercadolivre", {
         topic: "orders_v2",
@@ -369,6 +373,7 @@ describe("shipments against the database", () => {
     const result = await catchUpOrders(organizationId, accountId, {
       key,
       connectorFor: () => connector,
+      providerFor: () => fakeFiscalProvider(),
     });
     expect(result.status).toBe("ok");
     const refreshed = await db.order.findFirstOrThrow({
@@ -409,6 +414,7 @@ describe("shipments against the database", () => {
     const result = await printLabels(tenantDb(organizationId), organizationId, ids, "pdf", {
       key,
       connectorFor: () => connector,
+      providerFor: () => fakeFiscalProvider(),
     });
     expect(result).toMatchObject({ status: "ok", labels: 1, skipped: 1 });
     expect(asked).toEqual([["9001"]]);
@@ -418,6 +424,7 @@ describe("shipments against the database", () => {
     const none = await printLabels(tenantDb(organizationId), organizationId, [ids[2]!], "pdf", {
       key,
       connectorFor: () => connector,
+      providerFor: () => fakeFiscalProvider(),
     });
     expect(none.status).toBe("none_printable");
   });
