@@ -394,6 +394,8 @@ enum SyncJobType {
   replicate_listings
   /// Publish many drafts (2D)
   publish_drafts
+  /// Change price or status of many listings (bulk edit)
+  bulk_edit_listings
 
   @@map("sync_job_type")
 }
