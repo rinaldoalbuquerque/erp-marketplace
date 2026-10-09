@@ -39,6 +39,7 @@ model Organization {
   orders              Order[]
   orderItems          OrderItem[]
   invoices            Invoice[]
+  listingDrafts       ListingDraft[]
 
   @@map("organizations")
 }
@@ -60,6 +61,7 @@ model Profile {
   syncJobs            SyncJob[]
   listingEdits        ListingEdit[]
   invoices            Invoice[]
+  listingDrafts       ListingDraft[]
 
   @@map("profiles")
 }
@@ -161,6 +163,7 @@ model Sku {
 
   organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   orderItems      OrderItem[]
+  listingDrafts   ListingDraft[]
   // Composite key: the product must belong to the same organization (enforced by the database).
   // NoAction (checked at end of statement) so deleting an organization cascades cleanly.
   product         Product             @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: NoAction)
@@ -266,12 +269,13 @@ model MarketplaceAccount {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  connectedBy  Profile?     @relation(fields: [connectedById], references: [id], onDelete: SetNull)
-  listings     Listing[]
-  syncJobs     SyncJob[]
-  orders       Order[]
-  invoices     Invoice[]
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connectedBy   Profile?       @relation(fields: [connectedById], references: [id], onDelete: SetNull)
+  listings      Listing[]
+  syncJobs      SyncJob[]
+  orders        Order[]
+  invoices      Invoice[]
+  listingDrafts ListingDraft[]
 
   /// One marketplace account belongs to a single organization (SaaS-safe).
   @@unique([marketplace, externalUserId])
@@ -325,6 +329,7 @@ model Listing {
   edits        ListingEdit[]
   stockPushes  StockPush[]
   orderItems   OrderItem[]
+  drafts       ListingDraft[]
 
   @@unique([marketplaceAccountId, externalId])
   @@unique([organizationId, id])
@@ -734,4 +739,49 @@ model Invoice {
   @@unique([organizationId, id])
   @@index([marketplaceAccountId, packKey])
   @@map("invoices")
+}
+
+enum ListingDraftStatus {
+  draft
+  /// The marketplace validated it (POST /items/validate) with no errors
+  validated
+  /// Being published right now (claim: only one publish per draft)
+  publishing
+  published
+  /// The last validate/publish attempt was refused (see lastErrors)
+  failed
+
+  @@map("listing_draft_status")
+}
+
+/**
+ * New listing being prepared in the ERP (canonical model), published to one account.
+ */
+model ListingDraft {
+  id                   String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId       String             @map("organization_id") @db.Uuid
+  marketplaceAccountId String             @map("marketplace_account_id") @db.Uuid
+  /// ERP SKU the listing sells (linked automatically after publishing)
+  skuId                String?            @map("sku_id") @db.Uuid
+  status               ListingDraftStatus @default(draft)
+  /// CanonicalListing (src/domain/listings/canonical.ts)
+  content              Json
+  /// Messages of the last refused validate/publish (pt-BR when translated)
+  lastErrors           String[]           @default([]) @map("last_errors")
+  /// Listing created from it (local copy and marketplace id)
+  listingId            String?            @map("listing_id") @db.Uuid
+  externalId           String?            @map("external_id")
+  publishedAt          DateTime?          @map("published_at") @db.Timestamptz(6)
+  createdById          String?            @map("created_by_id") @db.Uuid
+  createdAt            DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account      MarketplaceAccount @relation(fields: [organizationId, marketplaceAccountId], references: [organizationId, id], onDelete: NoAction)
+  sku          Sku?               @relation(fields: [organizationId, skuId], references: [organizationId, id], onDelete: NoAction)
+  listing      Listing?           @relation(fields: [organizationId, listingId], references: [organizationId, id], onDelete: NoAction)
+  createdBy    Profile?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, updatedAt])
+  @@map("listing_drafts")
 }
