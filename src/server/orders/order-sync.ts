@@ -12,11 +12,7 @@ import {
 import { retryDelayMs } from "@/domain/stock/push-rules";
 import { db } from "@/server/db";
 import { getConnector } from "@/server/marketplaces/config";
-import {
-  getAccessToken,
-  ReconnectRequiredError,
-  type TokenDeps,
-} from "@/server/marketplaces/token-service";
+import { getAccessToken, ReconnectRequiredError } from "@/server/marketplaces/token-service";
 import { enqueueForSkus } from "@/server/stock-sync/push-service";
 import { tenantDb } from "@/server/tenant/tenant-db";
 
