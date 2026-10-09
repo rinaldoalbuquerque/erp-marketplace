@@ -14,6 +14,8 @@ import { getAccessToken, ReconnectRequiredError } from "@/server/marketplaces/to
 import type { ImportDeps } from "@/server/listings/import-service";
 import type { TenantDb } from "@/server/tenant/tenant-db";
 
+import type { Prisma } from "@/generated/prisma/client";
+
 // Sends ERP stock to the linked marketplace listings (Option C), as an outbox:
 // - a change in the ERP upserts ONE `stock_pushes` row per listing/variation with
 //   the latest wanted quantity (many changes in a row = one send);
@@ -94,31 +96,33 @@ const MAPPING_SELECT = {
   listing: { select: { logisticType: true, account: { select: { multiWarehouse: true } } } },
 } as const;
 
-/** Queues the current stock of these SKUs for every linked listing with sync on. */
-export async function enqueueForSkus(
+async function enqueueWhere(
   tdb: TenantDb,
   organizationId: string,
-  skuIds: string[],
-): Promise<number> {
-  if (skuIds.length === 0) return 0;
+  where: Prisma.SkuListingMappingWhereInput,
+) {
   const mappings = await tdb.skuListingMapping.findMany({
-    where: { skuId: { in: skuIds }, listing: { account: SYNC_ACCOUNT } },
+    where: { AND: [where, { listing: { account: SYNC_ACCOUNT } }] },
     select: MAPPING_SELECT,
   });
   return upsertPushes(tdb, organizationId, mappings);
 }
 
+/** Queues the current stock of these SKUs for every linked listing with sync on. */
+export function enqueueForSkus(tdb: TenantDb, organizationId: string, skuIds: string[]) {
+  if (skuIds.length === 0) return Promise.resolve(0);
+  return enqueueWhere(tdb, organizationId, { skuId: { in: skuIds } });
+}
+
+/** Queues these listings (e.g. right after they were linked to a SKU). */
+export function enqueueForListings(tdb: TenantDb, organizationId: string, listingIds: string[]) {
+  if (listingIds.length === 0) return Promise.resolve(0);
+  return enqueueWhere(tdb, organizationId, { listingId: { in: listingIds } });
+}
+
 /** Queues every linked listing of one account (used when sync is turned on). */
-export async function enqueueAllForAccount(
-  tdb: TenantDb,
-  organizationId: string,
-  accountId: string,
-): Promise<number> {
-  const mappings = await tdb.skuListingMapping.findMany({
-    where: { listing: { marketplaceAccountId: accountId, account: SYNC_ACCOUNT } },
-    select: MAPPING_SELECT,
-  });
-  return upsertPushes(tdb, organizationId, mappings);
+export function enqueueAllForAccount(tdb: TenantDb, organizationId: string, accountId: string) {
+  return enqueueWhere(tdb, organizationId, { listing: { marketplaceAccountId: accountId } });
 }
 
 export type ProcessResult = {

@@ -9,6 +9,8 @@ import {
   createFromListings,
   type CreateFromListingsReport,
 } from "@/server/products/from-listings-service";
+import { enqueueForSkus } from "@/server/stock-sync/push-service";
+import { queueStockSync } from "@/server/stock-sync/schedule";
 import { getTenantContext } from "@/server/tenant/tenant-db";
 
 const inputSchema = z.object({
@@ -35,6 +37,18 @@ export async function createFromListingsAction(input: {
     },
     parsed.data,
   );
+  // New SKUs were linked (and may have stock): their listings follow the ERP now.
+  await queueStockSync(member.organizationId, async () => {
+    const skus = await tdb.sku.findMany({
+      where: { code: { in: parsed.data.codes } },
+      select: { id: true },
+    });
+    return enqueueForSkus(
+      tdb,
+      member.organizationId,
+      skus.map((sku) => sku.id),
+    );
+  });
   revalidatePath("/produtos");
   revalidatePath("/estoque");
   revalidatePath("/mapeamento");

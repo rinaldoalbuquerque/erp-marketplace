@@ -10,6 +10,8 @@ import {
   unlinkMappings,
   type AutoMatchItem,
 } from "@/server/listings/mapping-service";
+import { enqueueForListings } from "@/server/stock-sync/push-service";
+import { queueStockSync } from "@/server/stock-sync/schedule";
 import { getTenantContext } from "@/server/tenant/tenant-db";
 
 export type LinkFormState = { status: "idle" | "error" | "success"; message?: string };
@@ -46,6 +48,9 @@ export async function linkSkuAction(
     skuCode: parsed.data.skuCode,
   });
   if (result.status !== "linked") return { status: "error", message: LINK_MESSAGES[result.status] };
+  await queueStockSync(member.organizationId, () =>
+    enqueueForListings(tdb, member.organizationId, [parsed.data.listingId]),
+  );
   revalidatePath("/mapeamento");
   revalidatePath("/anuncios");
   return { status: "success", message: `Vinculado a ${result.skuCode}.` };
@@ -64,6 +69,17 @@ export async function autoMatchAction(): Promise<AutoMatchItem[]> {
   const member = await requirePermission("listings.edit");
   const { tdb } = await getTenantContext(member);
   const linked = await autoMatch(tdb, member.organizationId, member.user.id);
+  await queueStockSync(member.organizationId, async () => {
+    const mappings = await tdb.skuListingMapping.findMany({
+      where: { id: { in: linked.map((item) => item.mappingId) } },
+      select: { listingId: true },
+    });
+    return enqueueForListings(
+      tdb,
+      member.organizationId,
+      mappings.map((mapping) => mapping.listingId),
+    );
+  });
   revalidatePath("/mapeamento");
   revalidatePath("/anuncios");
   return linked;

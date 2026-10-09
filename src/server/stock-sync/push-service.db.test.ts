@@ -12,6 +12,7 @@ import { db } from "@/server/db";
 import { encryptTokens } from "@/server/marketplaces/token-service";
 import {
   enqueueAllForAccount,
+  enqueueForListings,
   enqueueForSkus,
   processStockPushes,
 } from "@/server/stock-sync/push-service";
@@ -151,6 +152,12 @@ describe("stock push queue against the database", () => {
     expect(local.map((listing) => listing.availableQuantity)).toEqual([7, 7]);
     const full = await db.listing.findUniqueOrThrow({ where: { id: listings["MLB-FULL"] } });
     expect(full.availableQuantity).toBe(99);
+  });
+
+  it("queues only the listings asked for (e.g. a new link)", async () => {
+    expect(await enqueueForListings(tdb(), organizationId, [listings["MLB-UP-B"]!])).toBe(1);
+    expect(await db.stockPush.count({ where: { organizationId } })).toBe(1);
+    expect(await pushOf("MLB-UP-B")).toMatchObject({ status: "pending", desiredQuantity: 7 });
   });
 
   it("many changes in a row become one send with the latest stock (negative = 0)", async () => {

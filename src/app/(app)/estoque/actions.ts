@@ -6,6 +6,8 @@ import { stockAdjustmentSchema } from "@/domain/stock/movements";
 import { readFields, type FormState } from "@/lib/auth/form-state";
 import { fieldErrors } from "@/lib/auth/schemas";
 import { requirePermission } from "@/server/auth/session";
+import { enqueueForSkus } from "@/server/stock-sync/push-service";
+import { queueStockSync } from "@/server/stock-sync/schedule";
 import { adjustStock } from "@/server/stock/stock-service";
 import { getTenantContext } from "@/server/tenant/tenant-db";
 
@@ -31,6 +33,12 @@ export async function adjustStockAction(_prev: FormState, formData: FormData): P
     type === "count"
       ? await adjustStock(tdb, { ...common, type, countedQuantity: quantity })
       : await adjustStock(tdb, { ...common, type, quantity });
+
+  if (result.status === "applied") {
+    await queueStockSync(member.organizationId, () =>
+      enqueueForSkus(tdb, member.organizationId, [skuId]),
+    );
+  }
 
   revalidatePath(`/estoque/${skuId}`);
   revalidatePath("/estoque");
