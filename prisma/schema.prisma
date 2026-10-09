@@ -390,6 +390,10 @@ model SkuListingMapping {
 
 enum SyncJobType {
   import_listings
+  /// Copy many listings into drafts of an account (2D)
+  replicate_listings
+  /// Publish many drafts (2D)
+  publish_drafts
 
   @@map("sync_job_type")
 }
@@ -419,6 +423,8 @@ model SyncJob {
   failedCount          Int           @default(0) @map("failed_count")
   /// External ids still to process (resume point)
   pendingIds           Json?         @map("pending_ids")
+  /// Job options, e.g. replicate: { "pricePercent": 10, "roundTo90": true, "listingTypeId": "gold_pro" }
+  params               Json?
   /// First errors: [{ "id": "MLB...", "message": "..." }]
   errors               Json          @default("[]")
   lastError            String?       @map("last_error")
@@ -432,7 +438,9 @@ model SyncJob {
   organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   account      MarketplaceAccount @relation(fields: [organizationId, marketplaceAccountId], references: [organizationId, id], onDelete: NoAction)
   startedBy    Profile?           @relation(fields: [startedById], references: [id], onDelete: SetNull)
+  drafts       ListingDraft[]
 
+  @@unique([organizationId, id])
   @@index([organizationId, marketplaceAccountId, createdAt])
   @@map("sync_jobs")
 }
@@ -772,6 +780,13 @@ model ListingDraft {
   listingId            String?            @map("listing_id") @db.Uuid
   externalId           String?            @map("external_id")
   publishedAt          DateTime?          @map("published_at") @db.Timestamptz(6)
+  /// Where the copy came from (reference only: copies are independent)
+  sourceKind           ListingSourceKind? @map("source_kind")
+  sourceExternalId     String?            @map("source_external_id")
+  /// Own account of the source listing (null for other sellers)
+  sourceAccountId      String?            @map("source_account_id") @db.Uuid
+  /// Batch (sync_jobs replicate_listings) that created it
+  batchJobId           String?            @map("batch_job_id") @db.Uuid
   createdById          String?            @map("created_by_id") @db.Uuid
   createdAt            DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -781,7 +796,19 @@ model ListingDraft {
   sku          Sku?               @relation(fields: [organizationId, skuId], references: [organizationId, id], onDelete: NoAction)
   listing      Listing?           @relation(fields: [organizationId, listingId], references: [organizationId, id], onDelete: NoAction)
   createdBy    Profile?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  batchJob     SyncJob?           @relation(fields: [organizationId, batchJobId], references: [organizationId, id], onDelete: NoAction)
 
+  /// A batch never copies the same source twice (running it again does not duplicate)
+  @@unique([batchJobId, sourceExternalId])
   @@index([organizationId, status, updatedAt])
   @@map("listing_drafts")
+}
+
+enum ListingSourceKind {
+  /// A listing of one of the organization's accounts
+  own
+  /// Another seller's listing ("copiar de fora")
+  external
+
+  @@map("listing_source_kind")
 }
