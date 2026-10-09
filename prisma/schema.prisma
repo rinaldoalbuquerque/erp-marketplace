@@ -38,6 +38,7 @@ model Organization {
   stockPushes         StockPush[]
   orders              Order[]
   orderItems          OrderItem[]
+  invoices            Invoice[]
 
   @@map("organizations")
 }
@@ -58,6 +59,7 @@ model Profile {
   skuListingMappings  SkuListingMapping[]
   syncJobs            SyncJob[]
   listingEdits        ListingEdit[]
+  invoices            Invoice[]
 
   @@map("profiles")
 }
@@ -137,6 +139,8 @@ model Sku {
   unit        String  @default("UN")
   /// 4 digits, e.g. 5102
   defaultCfop String? @map("default_cfop")
+  /// Simples Nacional: CSOSN, 3 digits (e.g. 102, 500)
+  csosn       String?
 
   // Shipping (optional)
   weightGrams Int? @map("weight_grams")
@@ -267,6 +271,7 @@ model MarketplaceAccount {
   listings     Listing[]
   syncJobs     SyncJob[]
   orders       Order[]
+  invoices     Invoice[]
 
   /// One marketplace account belongs to a single organization (SaaS-safe).
   @@unique([marketplace, externalUserId])
@@ -591,6 +596,11 @@ model Order {
   slaStatus         String?    @map("sla_status")
   shipmentSyncedAt  DateTime?  @map("shipment_synced_at") @db.Timestamptz(6)
 
+  /// Sale invoice (NF-e) of this order; cart orders share one invoice
+  invoiceId        String?   @map("invoice_id") @db.Uuid
+  /// Last time the invoice of this order was looked up at the marketplace
+  invoiceCheckedAt DateTime? @map("invoice_checked_at") @db.Timestamptz(6)
+
   raw       Json
   syncedAt  DateTime @map("synced_at") @db.Timestamptz(6)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -599,6 +609,7 @@ model Order {
   organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   account      MarketplaceAccount @relation(fields: [organizationId, marketplaceAccountId], references: [organizationId, id], onDelete: NoAction)
   items        OrderItem[]
+  invoice      Invoice?           @relation(fields: [organizationId, invoiceId], references: [organizationId, id], onDelete: NoAction)
 
   @@unique([marketplaceAccountId, externalId])
   @@unique([organizationId, id])
@@ -672,4 +683,55 @@ model OrderItem {
   @@unique([orderId, externalItemId, variationKey])
   @@index([organizationId, skuId])
   @@map("order_items")
+}
+
+/// Who issued an invoice (CLAUDE.md: FiscalProvider). The rest of the ERP only
+/// sees the `invoices` table, whoever issued it.
+enum InvoiceProvider {
+  /// Mercado Livre's own issuer (Faturador), via API or the seller panel
+  mercadolivre
+  /// XML issued elsewhere and sent to the marketplace (plan B, Phase 4B)
+  xml_import
+
+  @@map("invoice_provider")
+}
+
+/// Sale invoice (NF-e). One per cart (all orders of a pack share it).
+model Invoice {
+  id                   String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId       String          @map("organization_id") @db.Uuid
+  marketplaceAccountId String          @map("marketplace_account_id") @db.Uuid
+  provider             InvoiceProvider
+  /// Invoice id at the provider (ML invoice id); null while requesting
+  externalId           String?         @map("external_id")
+  /// "requesting" while the ERP asks for it, "error" when refused; otherwise the
+  /// provider status (ML: authorized, ...)
+  status               String
+  number               Int?
+  series               String?
+  /// 44-digit access key
+  accessKey            String?         @map("access_key")
+  amountCents          Int?            @map("amount_cents")
+  issuedAt             DateTime?       @map("issued_at") @db.Timestamptz(6)
+  /// Provider paths to download the DANFE (PDF) and the XML
+  danfePath            String?         @map("danfe_path")
+  xmlPath              String?         @map("xml_path")
+  errorCode            String?         @map("error_code")
+  errorMessage         String?         @map("error_message")
+  /// Pack id, or the order id when the sale is not a cart: one invoice request at a time per key
+  packKey              String          @map("pack_key")
+  requestedById        String?         @map("requested_by_id") @db.Uuid
+  raw                  Json?
+  createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account      MarketplaceAccount @relation(fields: [organizationId, marketplaceAccountId], references: [organizationId, id], onDelete: NoAction)
+  requestedBy  Profile?           @relation(fields: [requestedById], references: [id], onDelete: SetNull)
+  orders       Order[]
+
+  @@unique([marketplaceAccountId, externalId])
+  @@unique([organizationId, id])
+  @@index([marketplaceAccountId, packKey])
+  @@map("invoices")
 }
