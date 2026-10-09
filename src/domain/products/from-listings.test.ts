@@ -223,6 +223,24 @@ describe("buildProposal", () => {
     });
   });
 
+  it("the most complete listing leads, whatever the input order", () => {
+    const complete = listing({
+      externalId: "MLB9",
+      sellerSku: "GAR-1L",
+      title: "Garrafa completa",
+      attributes: attrs({ BRAND: "Termolar", SELLER_PACKAGE_WEIGHT: "500 g" }),
+    });
+    const bare = listing({ externalId: "MLB1", sellerSku: "GAR-1L", title: "Garrafa sem dados" });
+    for (const order of [
+      [complete, bare],
+      [bare, complete],
+    ]) {
+      const product = buildProposal(order, new Set()).products[0];
+      expect(product).toMatchObject({ name: "Garrafa completa", brand: "Termolar" });
+      expect(product?.skus[0]?.weightGrams).toBe(500);
+    }
+  });
+
   it("blocks codes the ERP can't store", () => {
     const proposal = buildProposal(
       [listing({ externalId: "MLB1", sellerSku: "CAM AZUL" })],

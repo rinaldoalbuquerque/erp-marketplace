@@ -41,6 +41,7 @@ async function loadSources(tdb: TenantDb, organizationId: string): Promise<Sourc
            available_quantity, raw->'attributes' AS attributes
     FROM listings
     WHERE organization_id = ${organizationId}::uuid
+    ORDER BY external_id
   `;
   const variations = await tdb.listingVariation.findMany({
     select: {

@@ -141,6 +141,9 @@ type Unit = {
 
 const unique = <T>(values: T[]) => [...new Set(values)];
 
+const filledAttributes = (unit: Unit) =>
+  unit.attributes.filter((attribute) => attribute.value_name?.trim()).length;
+
 /** Attributes whose value changes between the SKUs of a family become the variation. */
 function familyVariations(units: Unit[][]): Map<Unit[], VariationAttribute[]> {
   const result = new Map<Unit[], VariationAttribute[]>();
@@ -219,7 +222,14 @@ export function buildProposal(listings: SourceListing[], existingCodes: Set<stri
     }
   }
 
-  // One SKU per code.
+  // One SKU per code. The listing with the most filled attributes leads (name,
+  // brand, weight, size come from it); ties by external id. Deterministic: the
+  // result never depends on the order listings come from the database.
+  units.sort(
+    (a, b) =>
+      filledAttributes(b) - filledAttributes(a) ||
+      a.listing.externalId.localeCompare(b.listing.externalId),
+  );
   const byCode = new Map<string, Unit[]>();
   for (const unit of units) byCode.set(unit.code, [...(byCode.get(unit.code) ?? []), unit]);
 
