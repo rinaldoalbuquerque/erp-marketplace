@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   MarketplaceApiError,
   MarketplaceAuthError,
+  MarketplaceValidationError,
   type MarketplaceConnector,
   type MarketplaceId,
 } from "@/connectors/types";
@@ -20,6 +21,7 @@ import { enqueueForSkus } from "@/server/stock-sync/push-service";
 import { tenantDb } from "@/server/tenant/tenant-db";
 
 import { saveOrder, type OrderAccount } from "./order-service";
+import { refreshShipment, shipmentsToRefresh } from "./shipment-service";
 
 // Receiving sales (Phase 3A). Internal routine: unscoped `db`, always filtering
 // by the account's organization.
@@ -37,6 +39,12 @@ export type OrderSyncDeps = TokenDeps & {
 
 const ORDER_TOPIC = "orders_v2";
 const ORDER_RESOURCE = /^\/orders\/(\d{1,30})$/;
+/** Topic "shipments": resource /shipments/{id} (same docs page). */
+const SHIPMENT_TOPIC = "shipments";
+const SHIPMENT_RESOURCE = /^\/shipments\/(\d{1,30})$/;
+/** Each catch-up also refreshes up to this many open shipments not read recently. */
+const SHIPMENTS_PER_CATCH_UP = 60;
+const SHIPMENT_STALE_MS = 15 * 60 * 1000;
 const MAX_TRIES = 5;
 const CLAIM_MS = 2 * 60 * 1000;
 /** First catch-up of an account looks back this far. */
@@ -175,7 +183,12 @@ export async function processNotifications(
         data: { ...data, claimedUntil: null },
       });
 
-    const match = note.topic === ORDER_TOPIC ? ORDER_RESOURCE.exec(note.resource) : null;
+    const match =
+      note.topic === ORDER_TOPIC
+        ? ORDER_RESOURCE.exec(note.resource)
+        : note.topic === SHIPMENT_TOPIC
+          ? SHIPMENT_RESOURCE.exec(note.resource)
+          : null;
     const account = match
       ? await db.marketplaceAccount.findFirst({
           where: {
@@ -198,8 +211,16 @@ export async function processNotifications(
 
     try {
       const token = await getAccessToken(account.organizationId, account.id, deps);
-      const order = await connectorFor(account.marketplace).getOrder(token, match[1]!);
-      if (await applyOrder(account, order, now())) organizations.add(account.organizationId);
+      const connector = connectorFor(account.marketplace);
+      if (note.topic === SHIPMENT_TOPIC) {
+        await refreshShipment(account, connector, token, match[1]!, now());
+      } else {
+        const order = await connector.getOrder(token, match[1]!);
+        if (await applyOrder(account, order, now())) organizations.add(account.organizationId);
+        if (order.shippingId) {
+          await refreshShipment(account, connector, token, order.shippingId, now());
+        }
+      }
       await finish({ status: "done", processedAt: now(), lastError: null });
       result.done++;
     } catch (error) {
@@ -272,6 +293,29 @@ export async function catchUpOrders(
     let stockChanged = false;
     for (const order of orders) {
       if (await applyOrder(account, order, to)) stockChanged = true;
+    }
+    // Shipments of the changed orders, plus open ones not read for a while
+    // (a shipment can change without its order changing).
+    const stale = await shipmentsToRefresh(account, {
+      staleBefore: new Date(to.getTime() - SHIPMENT_STALE_MS),
+      limit: SHIPMENTS_PER_CATCH_UP,
+    });
+    const shippingIds = new Set([
+      ...orders.flatMap((order) => (order.shippingId ? [order.shippingId] : [])),
+      ...stale,
+    ]);
+    const connector = connectorFor(account.marketplace);
+    for (const shippingId of shippingIds) {
+      try {
+        await refreshShipment(account, connector, token, shippingId, to);
+      } catch (error) {
+        // One unreadable shipment must not stop the catch-up; auth problems do.
+        if (!(
+          error instanceof MarketplaceApiError || error instanceof MarketplaceValidationError
+        )) {
+          throw error;
+        }
+      }
     }
     await db.marketplaceAccount.updateMany({
       where: { id: accountId, organizationId },

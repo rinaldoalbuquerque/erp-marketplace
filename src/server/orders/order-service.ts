@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { MarketplaceId, MarketplaceOrder } from "@/connectors/types";
+import { orderStage } from "@/domain/orders/stage";
 import { decideItemStock } from "@/domain/orders/stock-rules";
 import { adjustStock } from "@/server/stock/stock-service";
 import { tenantDb } from "@/server/tenant/tenant-db";
@@ -48,10 +49,35 @@ export async function saveOrder(
     },
   });
   const listingByExternal = new Map(listings.map((listing) => [listing.externalId, listing]));
+  const orderKey = {
+    marketplaceAccountId_externalId: {
+      marketplaceAccountId: account.id,
+      externalId: order.externalId,
+    },
+  };
+  // Shipment data already synced (shipment-service.ts) wins over the listing guess.
+  const existing = await tdb.order.findUnique({
+    where: orderKey,
+    select: {
+      logisticType: true,
+      shipmentStatus: true,
+      shipmentSubstatus: true,
+      shipmentSyncedAt: true,
+    },
+  });
   const logisticType =
+    (existing?.shipmentSyncedAt ? existing.logisticType : null) ??
     order.items
       .map((item) => listingByExternal.get(item.externalItemId)?.logisticType)
-      .find((value) => value) ?? null;
+      .find((value) => value) ??
+    null;
+  const stage = orderStage({
+    orderStatus: order.status,
+    hasShipment: order.shippingId !== null,
+    logisticType,
+    shipmentStatus: existing?.shipmentStatus ?? null,
+    shipmentSubstatus: existing?.shipmentSubstatus ?? null,
+  });
 
   const data = {
     marketplace: account.marketplace,
@@ -63,6 +89,7 @@ export async function saveOrder(
     buyerNickname: order.buyerNickname,
     shippingId: order.shippingId,
     logisticType,
+    stage,
     dateCreated: order.dateCreated,
     dateClosed: order.dateClosed,
     externalUpdatedAt: order.externalUpdatedAt,
@@ -70,12 +97,7 @@ export async function saveOrder(
     syncedAt,
   };
   const saved = await tdb.order.upsert({
-    where: {
-      marketplaceAccountId_externalId: {
-        marketplaceAccountId: account.id,
-        externalId: order.externalId,
-      },
-    },
+    where: orderKey,
     create: {
       organizationId,
       marketplaceAccountId: account.id,
