@@ -16,6 +16,7 @@ import {
   enqueueForSkus,
   processStockPushes,
 } from "@/server/stock-sync/push-service";
+import { stockSyncPreview } from "@/server/stock-sync/queries";
 import { tenantDb } from "@/server/tenant/tenant-db";
 import { fakeConnector } from "@/test/fake-connector";
 
@@ -243,6 +244,18 @@ describe("stock push queue against the database", () => {
       status: "skipped",
       skipReason: SKIP_REASONS.multiWarehouse,
     });
+  });
+
+  it("preview warns about listings that would be zeroed, Full last", async () => {
+    await setStock(0);
+    await db.listing.updateMany({ where: { organizationId }, data: { availableQuantity: 99 } });
+    const rows = await stockSyncPreview(tdb(), accountId);
+    expect(rows.map((row) => [row.externalId, row.willZero, row.plan.action])).toEqual([
+      ["MLB-UP-A", true, "send"],
+      ["MLB-UP-B", true, "send"],
+      ["MLB-FULL", false, "skip"],
+    ]);
+    expect(await db.stockPush.count({ where: { organizationId } })).toBe(0); // preview sends nothing
   });
 
   it("stops at the deadline and leaves the rest for the next round", async () => {

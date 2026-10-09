@@ -9,6 +9,8 @@ import { can } from "@/domain/auth/permissions";
 import { variationLabel } from "@/domain/products/schemas";
 import { MOVEMENT_LABELS } from "@/domain/stock/movements";
 import { requirePermission } from "@/server/auth/session";
+import { skuListingsSync } from "@/server/stock-sync/queries";
+import { processDueInBackground } from "@/server/stock-sync/schedule";
 import { getSkuStock, HISTORY_SIZE } from "@/server/stock/queries";
 import { getTenantContext } from "@/server/tenant/tenant-db";
 
@@ -35,7 +37,11 @@ async function SkuStock({ params }: Pick<PageProps<"/estoque/[skuId]">, "params"
   const { tdb } = await getTenantContext(member);
   const { skuId } = await params;
   if (!z.uuid().safeParse(skuId).success) notFound();
-  const data = await getSkuStock(tdb, skuId);
+  const [data, linked] = await Promise.all([
+    getSkuStock(tdb, skuId),
+    skuListingsSync(tdb, skuId),
+    processDueInBackground(member.organizationId),
+  ]);
   if (!data) notFound();
   const { sku, movements } = data;
   const negative = sku.stockOnHand < 0;
@@ -82,6 +88,8 @@ async function SkuStock({ params }: Pick<PageProps<"/estoque/[skuId]">, "params"
           {can(member.role, "stock.adjust") ? (
             <AdjustStockForm skuId={sku.id} unit={sku.unit} />
           ) : null}
+
+          <LinkedListings rows={linked} />
         </div>
 
         <section>
@@ -138,5 +146,62 @@ async function SkuStock({ params }: Pick<PageProps<"/estoque/[skuId]">, "params"
         </section>
       </div>
     </>
+  );
+}
+
+type LinkedRow = Awaited<ReturnType<typeof skuListingsSync>>[number];
+
+function syncLabel(row: LinkedRow): { text: string; attention?: boolean } {
+  if (!row.syncOn) return { text: "Sincronização desligada nesta conta" };
+  const push = row.push;
+  if (!push) return { text: "Ainda não enviado" };
+  switch (push.status) {
+    case "sent":
+      return {
+        text: `Enviado: ${push.sentQuantity ?? "—"}${push.sentAt ? ` em ${DATE_TIME.format(push.sentAt)}` : ""}`,
+      };
+    case "pending":
+      return { text: push.lastError ?? `Na fila para enviar ${push.desiredQuantity}` };
+    case "skipped":
+      return { text: push.skipReason ?? "Ignorado" };
+    case "failed":
+      return { text: `Erro: ${push.lastError ?? "não enviado"}`, attention: true };
+  }
+}
+
+function LinkedListings({ rows }: { rows: LinkedRow[] }) {
+  return (
+    <section className="rounded-xl border border-border bg-surface p-5">
+      <h2 className="mb-3 text-lg font-semibold text-ink">Anúncios vinculados</h2>
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted">
+          Nenhum anúncio vinculado. Vincule em{" "}
+          <Link href="/mapeamento" className="text-brand hover:underline">
+            Mapeamento
+          </Link>
+          .
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-3 text-sm">
+          {rows.map((row) => {
+            const label = syncLabel(row);
+            return (
+              <li
+                key={row.listingId}
+                className="border-b border-border pb-3 last:border-0 last:pb-0"
+              >
+                <p className="truncate text-ink">{row.title}</p>
+                <p className="text-xs text-muted tabular-nums">
+                  {row.accountNickname} · {row.externalId} · no ML: {row.marketplaceQuantity ?? "—"}
+                </p>
+                <p className={`mt-1 text-xs ${label.attention ? "text-signal-ink" : "text-muted"}`}>
+                  {label.text}
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }

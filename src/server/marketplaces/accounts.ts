@@ -102,6 +102,8 @@ export function listAccounts(tdb: TenantDb) {
       listingModel: true,
       status: true,
       allowWrites: true,
+      stockSyncEnabled: true,
+      multiWarehouse: true,
       lastError: true,
       lastSyncAt: true,
       createdAt: true,

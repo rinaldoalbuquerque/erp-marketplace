@@ -6,12 +6,15 @@ import { ButtonLink, PageHeader } from "@/components/ui/page-header";
 import { requirePermission } from "@/server/auth/session";
 import { latestImportJobs } from "@/server/listings/import-service";
 import { listAccounts } from "@/server/marketplaces/accounts";
+import { pushCountsByAccount } from "@/server/stock-sync/queries";
+import { processDueInBackground } from "@/server/stock-sync/schedule";
 import { env } from "@/server/env";
 import { getTenantContext } from "@/server/tenant/tenant-db";
 
 import { disconnectAccountAction, setAllowWritesAction, testConnectionAction } from "./actions";
 import type { ImportProgress } from "./import-actions";
 import { ImportPanel } from "./import-panel";
+import { StockSyncPanel } from "./stock-sync-panel";
 
 export const metadata: Metadata = { title: "Contas de marketplace" };
 
@@ -57,6 +60,22 @@ const TEST_MESSAGES: Record<string, { tone: "success" | "error"; text: string }>
   not_found: { tone: "error", text: "Conta não encontrada." },
 };
 
+const STOCK_MESSAGES: Record<string, { tone: "success" | "error"; text: string }> = {
+  ligado: {
+    tone: "success",
+    text: "Sincronização de estoque ligada. O envio começou e segue em segundo plano.",
+  },
+  desligado: {
+    tone: "success",
+    text: "Sincronização de estoque desligada. O ERP não envia mais estoque para esta conta.",
+  },
+  enviando: { tone: "success", text: "Envio do estoque em andamento, em segundo plano." },
+  indisponivel: {
+    tone: "error",
+    text: "Para sincronizar o estoque, a conta precisa estar conectada e com alterações liberadas.",
+  },
+};
+
 const LISTING_MODEL_LABELS = {
   traditional: "Tradicional (com variações)",
   user_products: "User Products",
@@ -83,7 +102,12 @@ function param(value: string | string[] | undefined) {
 async function Accounts({ searchParams }: Pick<PageProps<"/contas">, "searchParams">) {
   const member = await requirePermission("marketplaceAccounts.manage");
   const { tdb } = await getTenantContext(member);
-  const [accounts, importJobs] = await Promise.all([listAccounts(tdb), latestImportJobs(tdb)]);
+  const [accounts, importJobs, pushCounts] = await Promise.all([
+    listAccounts(tdb),
+    latestImportJobs(tdb),
+    pushCountsByAccount(tdb),
+    processDueInBackground(member.organizationId),
+  ]);
   const query = await searchParams;
 
   const configured = Boolean(
@@ -101,6 +125,8 @@ async function Accounts({ searchParams }: Pick<PageProps<"/contas">, "searchPara
     notice = TEST_MESSAGES[param(query.teste)] ?? null;
   } else if (param(query.desconectada)) {
     notice = { tone: "success", text: "Conta desconectada. Os tokens foram apagados do ERP." };
+  } else if (param(query.estoque)) {
+    notice = STOCK_MESSAGES[param(query.estoque)] ?? null;
   } else if (param(query.alteracoes)) {
     notice = {
       tone: "success",
@@ -223,6 +249,16 @@ async function Accounts({ searchParams }: Pick<PageProps<"/contas">, "searchPara
                     {account.allowWrites ? "Bloquear alterações" : "Liberar alterações"}
                   </button>
                 </form>
+              ) : null}
+
+              {account.status === "active" ? (
+                <StockSyncPanel
+                  accountId={account.id}
+                  allowWrites={account.allowWrites}
+                  enabled={account.stockSyncEnabled}
+                  multiWarehouse={account.multiWarehouse}
+                  counts={pushCounts.get(account.id) ?? null}
+                />
               ) : null}
 
               <div className="mt-auto flex flex-wrap gap-2">

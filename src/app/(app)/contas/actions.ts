@@ -19,13 +19,16 @@ export async function testConnectionAction(accountId: string) {
   );
 }
 
-/** Turns on/off "the ERP may change listings of this account" (off by default). */
+/**
+ * Turns on/off "the ERP may change listings of this account" (off by default).
+ * Blocking also turns stock sync off: it must be turned on again on purpose.
+ */
 export async function setAllowWritesAction(accountId: string, allow: boolean) {
   const member = await requirePermission("marketplaceAccounts.manage");
   const { tdb } = await getTenantContext(member);
   await tdb.marketplaceAccount.updateMany({
     where: { id: accountId },
-    data: { allowWrites: allow },
+    data: allow ? { allowWrites: true } : { allowWrites: false, stockSyncEnabled: false },
   });
   revalidatePath("/contas");
   revalidatePath("/anuncios");

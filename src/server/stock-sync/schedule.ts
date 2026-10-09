@@ -13,8 +13,8 @@ import { processStockPushes } from "./push-service";
 const BACKGROUND_BUDGET_MS = 20_000;
 
 /** Sends the queued stock updates after the response (next/server `after`). */
-export function processInBackground(organizationId: string) {
-  const deadline = new Date(Date.now() + BACKGROUND_BUDGET_MS);
+export function processInBackground(organizationId: string, budgetMs = BACKGROUND_BUDGET_MS) {
+  const deadline = new Date(Date.now() + budgetMs);
   after(async () => {
     try {
       await processStockPushes(organizationId, deadline);
