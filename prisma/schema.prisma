@@ -573,10 +573,28 @@ model Order {
   /// When the sale was confirmed (ML discounts its stock here)
   dateClosed           DateTime?   @map("date_closed") @db.Timestamptz(6)
   externalUpdatedAt    DateTime?   @map("external_updated_at") @db.Timestamptz(6)
-  raw                  Json
-  syncedAt             DateTime    @map("synced_at") @db.Timestamptz(6)
-  createdAt            DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt            DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Shipment (ML /shipments/{shippingId}), copied onto every order that shares it
+  // (cart orders share one shipment), so the screen filters by stage directly.
+  /// Where the order is in the shipping flow (computed from the shipment)
+  stage             OrderStage @default(pending)
+  shipmentStatus    String?    @map("shipment_status")
+  shipmentSubstatus String?    @map("shipment_substatus")
+  /// ML logistic.mode, e.g. me2 (labels only exist for me2)
+  shipmentMode      String?    @map("shipment_mode")
+  trackingNumber    String?    @map("tracking_number")
+  /// Label can only be printed from this moment (substatus buffered)
+  labelAvailableAt  DateTime?  @map("label_available_at") @db.Timestamptz(6)
+  /// Dispatch deadline (ML /shipments/{id}/sla expected_date)
+  dispatchBy        DateTime?  @map("dispatch_by") @db.Timestamptz(6)
+  /// on_time, delayed, early...
+  slaStatus         String?    @map("sla_status")
+  shipmentSyncedAt  DateTime?  @map("shipment_synced_at") @db.Timestamptz(6)
+
+  raw       Json
+  syncedAt  DateTime @map("synced_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   account      MarketplaceAccount @relation(fields: [organizationId, marketplaceAccountId], references: [organizationId, id], onDelete: NoAction)
@@ -585,7 +603,29 @@ model Order {
   @@unique([marketplaceAccountId, externalId])
   @@unique([organizationId, id])
   @@index([organizationId, dateCreated])
+  @@index([organizationId, stage])
+  @@index([marketplaceAccountId, shippingId])
   @@map("orders")
+}
+
+/// Shipping stage shown as tabs on the Orders screen.
+enum OrderStage {
+  /// Not paid yet, shipment not created or being prepared
+  pending
+  /// Waiting for the invoice (NF): the label is released after it
+  invoice_pending
+  ready_to_print
+  /// Label printed: waiting for pickup / drop-off
+  printed
+  shipped
+  delivered
+  cancelled
+  /// Full: the marketplace ships it (no label)
+  fulfillment
+  /// No marketplace shipping (to be agreed, pickup...)
+  other
+
+  @@map("order_stage")
 }
 
 enum OrderItemStockStatus {
