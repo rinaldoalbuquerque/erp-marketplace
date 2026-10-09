@@ -27,8 +27,11 @@ describe("secret box", () => {
 
   it("rejects a tampered value", () => {
     const encrypted = encryptSecret(token, key);
-    const last = encrypted.at(-1) === "A" ? "B" : "A";
-    expect(() => decryptSecret(encrypted.slice(0, -1) + last, key)).toThrow(SecretBoxError);
+    // Flip a real byte (changing the last base64 character may only touch padding bits).
+    const payload = Buffer.from(encrypted.slice("v1:".length), "base64url");
+    payload[payload.length - 1] = payload[payload.length - 1]! ^ 0x01;
+    const tampered = `v1:${payload.toString("base64url")}`;
+    expect(() => decryptSecret(tampered, key)).toThrow(SecretBoxError);
   });
 
   it("rejects the wrong key without leaking the secret", () => {
