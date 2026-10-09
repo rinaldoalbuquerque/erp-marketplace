@@ -155,6 +155,7 @@ async function NewListing({ searchParams }: Pick<PageProps<"/anuncios/novo">, "s
                       type="radio"
                       name="skuId"
                       value={sku.id}
+                      required
                       defaultChecked={index === 0}
                       className="size-4 accent-brand"
                     />
@@ -174,8 +175,9 @@ async function NewListing({ searchParams }: Pick<PageProps<"/anuncios/novo">, "s
             </ul>
           )}
           <label className="mt-3 flex items-center gap-2 text-sm text-muted">
-            <input type="radio" name="skuId" value="" className="size-4 accent-brand" />
-            Começar em branco (sem SKU)
+            <input type="radio" name="skuId" value="" required className="size-4 accent-brand" />
+            Começar em branco (sem SKU: o anúncio não fica vinculado ao estoque; dá para vincular
+            depois em Mapeamento)
           </label>
         </section>
 
