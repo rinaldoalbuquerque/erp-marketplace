@@ -18,7 +18,7 @@ ERP para gerenciar anúncios, estoque e pedidos em marketplaces.
 - Prisma como ORM e para migrations
 - Validação de entrada com Zod
 - Testes: Vitest (unidade) e Playwright (fluxos principais, mais tarde)
-- Tarefas em segundo plano: por enquanto tabela `sync_jobs` + `after()` do Next (rodadas com limite de tempo, retomada por `pendingIds`, uma rodada por vez). Fila definitiva (pg-boss + servidor, ou serviço hospedado) a decidir na 2D
+- Tarefas em segundo plano: tabela `sync_jobs` + `after()` do Next (rodadas com limite de tempo, retomada por `pendingIds`, uma rodada por vez, progresso e relatório). **Decidido na 2D (09/10/2026):** manter este modelo enquanto for uso pessoal (funciona na Vercel Hobby, sem servidor extra); fila definitiva (pg-boss + worker, ou serviço hospedado) só quando virar SaaS
 
 ## Idioma
 
@@ -78,6 +78,7 @@ ERP para gerenciar anúncios, estoque e pedidos em marketplaces.
 | `npm run db:migrate` | Cria/aplica migration (`npx prisma migrate dev --create-only --name x` para revisar o SQL antes). **Depois, reiniciar o `npm run dev`**: o cliente do Prisma fica em cache no servidor de desenvolvimento e não enxerga tabelas novas |
 | `npm run db:generate` | Regenera o cliente do Prisma |
 | `npm run db:studio` | Abre o Prisma Studio para ver os dados |
+| `npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script` | Gera o SQL quando o `migrate dev` pede confirmação (ex.: índice único novo) e não roda sem terminal interativo: salvar em `prisma/migrations/<data>_<nome>/migration.sql`, revisar e aplicar com `npx prisma migrate deploy` |
 
 Notas técnicas:
 - Versões: Next.js 16 (veja `AGENTS.md`: ler `node_modules/next/dist/docs/` antes de usar APIs do Next), Prisma 7 (config em `prisma.config.ts`, cliente gerado em `src/generated/prisma`, adaptador `@prisma/adapter-pg`), Zod 4, Vitest 5.
@@ -94,6 +95,7 @@ Notas técnicas:
 - Anúncios importados ficam em `listings` (com `raw` = resposta completa do ML); vínculo com SKU em `sku_listing_mappings` (um SKU por anúncio/variação).
 - **Escrever no marketplace só via `saveEdit()`** (`src/server/listings/edit-service.ts`): exige `allowWrites` na conta (desligado por padrão), confere versão (conflito), envia só o que mudou, lê de volta e registra em `listing_edits`. Testar mudanças primeiro na conta de teste do ML.
 - **Estoque para o marketplace só pela fila** (`src/server/stock-sync/`): depois de mudar estoque ou vínculo, chamar `queueStockSync(org, () => enqueueForSkus/enqueueForListings(...))`. Só contas com `allowWrites` **e** `stockSyncEnabled` participam; regras (Full, variação, multi origem, negativo → 0) em `src/domain/stock/push-rules.ts`. O envio relê o saldo atual do SKU e só marca "enviado" se ninguém reenfileirou no meio (`claimToken`).
+- **Copiar/replicar só por rascunho** (`src/server/listings/copy-service.ts` e `batch-service.ts`): cópias entram como rascunho, independentes do original (origem só como referência); lotes em `sync_jobs` (`replicate_listings`, `publish_drafts`).
 - **Criar anúncio só por rascunho** (`src/server/listings/draft-service.ts`): conteúdo no modelo canônico (`src/domain/listings/canonical.ts`); `publishDraft()` exige `allowWrites`, trava o rascunho em `publishing` e nunca repete o `POST /items` sozinho. Fotos passam por Server Action (limite `serverActions.bodySizeLimit` = 4 MB em `next.config.ts`; a Vercel corta em 4,5 MB) e são reduzidas no navegador antes.
 - **Pedidos** (`src/server/orders/`): todo pedido entra por `saveOrder()` (idempotente; baixa/devolução de estoque por `adjustStock` com chave fixa por linha). Regras de baixa em `src/domain/orders/stock-rules.ts`, etapa do envio em `src/domain/orders/stage.ts`. Avisos do ML: `/api/notificacoes/mercadolivre` só grava e responde (limite de 500 ms); processamento em `after()`. Rotas de máquina (`/api/notificacoes`, `/api/cron`) ficam fora do `proxy.ts`.
 - ML: `/shipments` exige o cabeçalho `x-format-new: true` e não traz mais `order_id` (o pedido aponta para o envio pelo `shipping.id`). Etiqueta só em `ready_to_ship` + `ready_to_print` (ou `printed` para reimprimir), máx. 50 por chamada, nunca Full.

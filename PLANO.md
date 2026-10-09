@@ -153,7 +153,13 @@ ERP para gerenciar marketplaces, começando pelo Mercado Livre, com foco em **pr
   - Validar no ML (`/items/validate`) e Publicar (`POST /items`; User Products com `family_name` e sem título). Publica uma vez só (trava + sem nova tentativa automática); depois envia a descrição, importa, vincula ao SKU e enfileira o estoque.
   - Testado em 09/10/2026 na conta de teste: anúncio MLB7778987736 (User Products, 3 fotos, 31 atributos) publicado e importado.
   - Ainda não: várias variações de uma vez (nova variação na família), frete por anúncio, copiar anúncio existente (2D).
-- [ ] **2D** Replicação, cópia de fora e migração entre contas (reaproveita formulário e rascunhos), com fila em segundo plano
+- [x] **2D** Replicação, cópia de fora e migração entre contas (reaproveita formulário e rascunhos), com fila em segundo plano
+  - Qualquer anúncio (seu ou de outro vendedor) vira rascunho no modelo canônico (`copy-service.ts`); anúncio seu leva o vínculo com o SKU; fotos por endereço para outras contas (ids só na mesma conta); atributos filtrados pela ficha da categoria de destino. Origem guardada só como referência.
+  - Anúncios → "Copiar para…" (lote em segundo plano: conta, ajuste de preço %, arredondar para ,90, Clássico/Premium) e "Copiar anúncio de fora" (link ou MLB…, com aviso de direitos autorais).
+  - Rascunhos → "Publicar selecionados" (lote em segundo plano; cada rascunho uma vez; recusas no relatório).
+  - Lotes = `sync_jobs` (`replicate_listings`, `publish_drafts`) com rodadas em `after()`, progresso, retomada e relatório; um rascunho por origem em cada lote (índice único).
+  - Testado em 09/10/2026: 2 anúncios da BELA copiados para a conta de teste (SKU herdado, preço +10% arredondado para ,90) e publicados em lote (MLB5360907969, MLB5360919029).
+  - Ainda não: anúncios com variações (tradicionais), criar várias variações de uma família de uma vez.
 - [ ] **2E** IA: ficha técnica e descrição
 - [ ] Edição em massa (pode entrar junto da 2B/2D)
 
