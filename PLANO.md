@@ -139,6 +139,13 @@ ERP para gerenciar marketplaces, começando pelo Mercado Livre, com foco em **pr
   - Usuários de teste do ML criados (vendedor e comprador); vendedor conectado ao ERP.
   - Aprendido na prática: `family_name` via `PUT /items` é recusado em User Products (usar o endpoint de famílias); o ML manda avisos gerais (ex.: ME1, frete grátis) em toda alteração; o campo `cause` dos erros nem sempre é lista.
   - Ainda não: editar nome da família (endpoint de famílias), fotos, variações, edição em massa.
+- [x] Enviar o estoque do ERP para o Mercado Livre (sincronização de estoque)
+  - Fila `stock_pushes` (um registro por anúncio/variação, sempre com o saldo mais recente): ajuste de estoque, vínculo novo, vinculação automática e "Criar a partir dos anúncios" enfileiram; o envio roda em segundo plano (`after()`) e também ao abrir Contas/Estoque.
+  - `PUT /items/{id}` com `available_quantity`; um envio por User Product (o ML replica para os anúncios do mesmo UP); estoque negativo vai como 0. Novas tentativas em 1, 5, 15 e 60 min; recusa do ML vira erro com o motivo.
+  - Ignorados (com motivo): Full, variações de anúncio tradicional e contas com multi origem (`warehouse_management`, outro endpoint, ainda não feito).
+  - Chave por conta "Estoque do ERP no Mercado Livre" (exige alterações liberadas; bloquear alterações desliga). Ligar passa por uma prévia (ML hoje × vai ficar, destaca os que vão zerar e pausar). Contas mostra enviados/fila/ignorados/erros com "Enviar todos agora" e "Reenviar os com erro"; Estoque > SKU mostra a situação por anúncio.
+  - Testado em 09/10/2026 na conta de teste: ligar, envio inicial e ajuste refletidos no ML.
+  - Ainda não: multi origem, variações tradicionais, ligar na BELA.UTILIDADES (decisão do dono).
 - [ ] **2C** Criar anúncio: sugestão de categoria, simulador de preço, validação, publicação, rascunhos
 - [ ] **2D** Replicação, cópia de fora e migração entre contas (reaproveita formulário e rascunhos), com fila em segundo plano
 - [ ] **2E** IA: ficha técnica e descrição
