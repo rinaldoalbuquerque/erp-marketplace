@@ -36,6 +36,8 @@ model Organization {
   syncJobs            SyncJob[]
   listingEdits        ListingEdit[]
   stockPushes         StockPush[]
+  orders              Order[]
+  orderItems          OrderItem[]
 
   @@map("organizations")
 }
@@ -154,6 +156,7 @@ model Sku {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  orderItems      OrderItem[]
   // Composite key: the product must belong to the same organization (enforced by the database).
   // NoAction (checked at end of statement) so deleting an organization cascades cleanly.
   product         Product             @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: NoAction)
@@ -221,21 +224,27 @@ enum MarketplaceAccountStatus {
 /// A seller account connected to the ERP. Unlimited per organization, each one
 /// with its own credentials and sync state (CLAUDE.md).
 model MarketplaceAccount {
-  id               String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId   String                   @map("organization_id") @db.Uuid
-  marketplace      Marketplace
+  id                String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId    String                   @map("organization_id") @db.Uuid
+  marketplace       Marketplace
   /// Seller id in the marketplace (Mercado Livre user_id), stored as text.
-  externalUserId   String                   @map("external_user_id")
-  nickname         String
-  siteId           String?                  @map("site_id")
-  listingModel     ListingModel             @default(unknown) @map("listing_model")
-  status           MarketplaceAccountStatus @default(active)
+  externalUserId    String                   @map("external_user_id")
+  nickname          String
+  siteId            String?                  @map("site_id")
+  listingModel      ListingModel             @default(unknown) @map("listing_model")
+  status            MarketplaceAccountStatus @default(active)
   /// The ERP may change listings of this account (off by default; the owner turns it on).
-  allowWrites      Boolean                  @default(false) @map("allow_writes")
+  allowWrites       Boolean                  @default(false) @map("allow_writes")
   /// Send ERP stock to the linked listings (off by default; enabled after a preview).
-  stockSyncEnabled Boolean                  @default(false) @map("stock_sync_enabled")
+  stockSyncEnabled  Boolean                  @default(false) @map("stock_sync_enabled")
   /// Seller uses multi-origin stock (ML tag warehouse_management): other stock endpoint.
-  multiWarehouse   Boolean                  @default(false) @map("multi_warehouse")
+  multiWarehouse    Boolean                  @default(false) @map("multi_warehouse")
+  /// Sales of this account lower ERP stock (off by default).
+  orderStockEnabled Boolean                  @default(false) @map("order_stock_enabled")
+  /// Only orders confirmed after this moment move stock (older sales were already counted).
+  orderStockSince   DateTime?                @map("order_stock_since") @db.Timestamptz(6)
+  /// Orders changed up to this moment were already fetched (catch-up search cursor).
+  ordersSyncedAt    DateTime?                @map("orders_synced_at") @db.Timestamptz(6)
 
   /// AES-256-GCM encrypted (src/server/crypto). Never logged or shown.
   accessTokenEncrypted  String?   @map("access_token_encrypted")
@@ -257,6 +266,7 @@ model MarketplaceAccount {
   connectedBy  Profile?     @relation(fields: [connectedById], references: [id], onDelete: SetNull)
   listings     Listing[]
   syncJobs     SyncJob[]
+  orders       Order[]
 
   /// One marketplace account belongs to a single organization (SaaS-safe).
   @@unique([marketplace, externalUserId])
@@ -309,6 +319,7 @@ model Listing {
   mappings     SkuListingMapping[]
   edits        ListingEdit[]
   stockPushes  StockPush[]
+  orderItems   OrderItem[]
 
   @@unique([marketplaceAccountId, externalId])
   @@unique([organizationId, id])
@@ -503,4 +514,122 @@ model StockPush {
   @@unique([listingId, variationKey])
   @@index([organizationId, status, nextAttemptAt])
   @@map("stock_pushes")
+}
+
+enum NotificationStatus {
+  pending
+  done
+  /// Not for us (unknown account, topic we do not use)
+  ignored
+  failed
+
+  @@map("notification_status")
+}
+
+/// Inbox of marketplace notifications (internal, no organization: the account is
+/// resolved when processing). One row per resource: a repeated notification sets
+/// it back to pending and bumps `version`, so a round that read an older version
+/// never marks the newer one as done.
+model MarketplaceNotification {
+  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  marketplace    Marketplace
+  topic          String
+  /// e.g. /orders/2000003508897196 (only says WHAT to fetch; never trusted as data)
+  resource       String
+  externalUserId String             @map("external_user_id")
+  status         NotificationStatus @default(pending)
+  version        Int                @default(1)
+  tries          Int                @default(0)
+  nextAttemptAt  DateTime           @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  claimedUntil   DateTime?          @map("claimed_until") @db.Timestamptz(6)
+  lastError      String?            @map("last_error")
+  receivedAt     DateTime           @default(now()) @map("received_at") @db.Timestamptz(6)
+  processedAt    DateTime?          @map("processed_at") @db.Timestamptz(6)
+
+  @@unique([marketplace, topic, resource])
+  @@index([status, nextAttemptAt])
+  @@map("marketplace_notifications")
+}
+
+/// Marketplace sale (ML order). Saved again on every change (idempotent by external id).
+model Order {
+  id                   String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId       String      @map("organization_id") @db.Uuid
+  marketplaceAccountId String      @map("marketplace_account_id") @db.Uuid
+  marketplace          Marketplace
+  externalId           String      @map("external_id")
+  /// Cart: orders bought together share it (ML pack_id)
+  packId               String?     @map("pack_id")
+  /// Raw marketplace status (ML: paid, cancelled, partially_refunded...)
+  status               String
+  tags                 String[]    @default([])
+  totalCents           Int?        @map("total_cents")
+  currency             String?
+  buyerNickname        String?     @map("buyer_nickname")
+  shippingId           String?     @map("shipping_id")
+  /// From the sold listing (fulfillment = Full: the stock is in the marketplace warehouse)
+  logisticType         String?     @map("logistic_type")
+  dateCreated          DateTime    @map("date_created") @db.Timestamptz(6)
+  /// When the sale was confirmed (ML discounts its stock here)
+  dateClosed           DateTime?   @map("date_closed") @db.Timestamptz(6)
+  externalUpdatedAt    DateTime?   @map("external_updated_at") @db.Timestamptz(6)
+  raw                  Json
+  syncedAt             DateTime    @map("synced_at") @db.Timestamptz(6)
+  createdAt            DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account      MarketplaceAccount @relation(fields: [organizationId, marketplaceAccountId], references: [organizationId, id], onDelete: NoAction)
+  items        OrderItem[]
+
+  @@unique([marketplaceAccountId, externalId])
+  @@unique([organizationId, id])
+  @@index([organizationId, dateCreated])
+  @@map("orders")
+}
+
+enum OrderItemStockStatus {
+  /// Not confirmed yet (e.g. payment pending)
+  waiting
+  deducted
+  /// Cancelled after the deduction: stock given back
+  restored
+  /// Full, sale before the switch was on, or switch off
+  not_applicable
+  /// Sold listing is not linked to an ERP SKU
+  missing_sku
+
+  @@map("order_item_stock_status")
+}
+
+model OrderItem {
+  id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String               @map("organization_id") @db.Uuid
+  orderId        String               @map("order_id") @db.Uuid
+  /// Marketplace listing id, e.g. MLB123
+  externalItemId String               @map("external_item_id")
+  /// Variation id, or "" (same idea as sku_listing_mappings)
+  variationKey   String               @default("") @map("variation_key")
+  title          String
+  quantity       Int
+  unitPriceCents Int?                 @map("unit_price_cents")
+  saleFeeCents   Int?                 @map("sale_fee_cents")
+  sellerSku      String?              @map("seller_sku")
+  /// Local listing, when imported
+  listingId      String?              @map("listing_id") @db.Uuid
+  /// SKU whose stock was moved (kept even if the link changes later)
+  skuId          String?              @map("sku_id") @db.Uuid
+  stockStatus    OrderItemStockStatus @default(waiting) @map("stock_status")
+  stockNote      String?              @map("stock_note")
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  order        Order        @relation(fields: [organizationId, orderId], references: [organizationId, id], onDelete: Cascade)
+  listing      Listing?     @relation(fields: [organizationId, listingId], references: [organizationId, id], onDelete: NoAction)
+  sku          Sku?         @relation(fields: [organizationId, skuId], references: [organizationId, id], onDelete: NoAction)
+
+  @@unique([orderId, externalItemId, variationKey])
+  @@index([organizationId, skuId])
+  @@map("order_items")
 }
