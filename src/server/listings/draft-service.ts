@@ -118,6 +118,8 @@ export async function loadDraft(tdb: TenantDb, draftId: string) {
       listingId: true,
       publishedAt: true,
       updatedAt: true,
+      sourceKind: true,
+      sourceExternalId: true,
       account: {
         select: {
           id: true,
@@ -430,9 +432,11 @@ export async function publishDraft(
 }
 
 /** Drafts not published yet, newest first (Anúncios > Rascunhos). */
-export function listDrafts(tdb: TenantDb) {
+export function listDrafts(tdb: TenantDb, filters: { batchJobId?: string | null } = {}) {
   return tdb.listingDraft.findMany({
-    where: { status: { not: "published" } },
+    where: filters.batchJobId
+      ? { batchJobId: filters.batchJobId }
+      : { status: { not: "published" } },
     orderBy: { updatedAt: "desc" },
     take: 100,
     select: {
@@ -441,6 +445,8 @@ export function listDrafts(tdb: TenantDb) {
       content: true,
       lastErrors: true,
       updatedAt: true,
+      sourceKind: true,
+      sourceExternalId: true,
       account: { select: { nickname: true } },
       sku: { select: { code: true } },
     },

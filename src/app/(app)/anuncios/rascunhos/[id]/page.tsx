@@ -63,6 +63,9 @@ async function Draft({ params }: Pick<PageProps<"/anuncios/rascunhos/[id]">, "pa
             {STATUS_LABELS[draft.status]} · conta {draft.account.nickname}
             {draft.account.listingModel === "user_products" ? " (User Products)" : ""}
             {draft.sku ? ` · SKU ${draft.sku.code}` : " · sem SKU"}
+            {draft.sourceExternalId
+              ? ` · copiado de ${draft.sourceExternalId}${draft.sourceKind === "external" ? " (outro vendedor)" : ""}`
+              : ""}
           </>
         }
         back={{ href: "/anuncios/rascunhos", label: "Rascunhos" }}
@@ -91,6 +94,12 @@ async function Draft({ params }: Pick<PageProps<"/anuncios/rascunhos/[id]">, "pa
               Abrir a edição do anúncio
             </Link>
           ) : null}
+        </p>
+      ) : null}
+      {draft.sourceKind === "external" && draft.editable ? (
+        <p className="mb-5 rounded-lg border-l-4 border-signal bg-signal-soft px-3 py-2 text-sm text-signal-ink">
+          Copiado de outro vendedor: antes de publicar, troque as fotos e reescreva a descrição para
+          evitar denúncias por direitos autorais.
         </p>
       ) : null}
       {sheetError ? (

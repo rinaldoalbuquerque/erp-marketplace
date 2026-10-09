@@ -16,7 +16,13 @@ import {
 } from "@/server/listings/queries";
 import { getTenantContext } from "@/server/tenant/tenant-db";
 
+import { REPLICATE_FORM_ID, ReplicateBar } from "./replicate-bar";
+
 export const metadata: Metadata = { title: "Anúncios" };
+
+// Copy batches started here run in the background (`after`) with this page's
+// max duration (Vercel Hobby limit: 300s).
+export const maxDuration = 300;
 
 const DATE_TIME = new Intl.DateTimeFormat("pt-BR", {
   dateStyle: "short",
@@ -126,6 +132,9 @@ async function Listings({ searchParams }: Pick<PageProps<"/anuncios">, "searchPa
                 <ButtonLink href="/anuncios/rascunhos" variant="secondary">
                   Rascunhos
                 </ButtonLink>
+                <ButtonLink href="/anuncios/copiar" variant="secondary">
+                  Copiar anúncio de fora
+                </ButtonLink>
                 <ButtonLink href="/anuncios/novo">
                   <Plus className="size-4" aria-hidden="true" />
                   Novo anúncio
@@ -214,6 +223,12 @@ async function Listings({ searchParams }: Pick<PageProps<"/anuncios">, "searchPa
         ) : null}
       </form>
 
+      {canEdit && result.listings.length > 0 ? (
+        <ReplicateBar
+          accounts={accounts.map((account) => ({ id: account.id, nickname: account.nickname }))}
+        />
+      ) : null}
+
       {result.listings.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-surface p-10 text-center">
           <p className="font-display text-lg font-semibold text-ink">Nenhum anúncio encontrado</p>
@@ -226,6 +241,11 @@ async function Listings({ searchParams }: Pick<PageProps<"/anuncios">, "searchPa
           <table className="w-full text-sm">
             <thead className="border-b border-border text-left text-muted">
               <tr>
+                {canEdit ? (
+                  <th className="w-10 px-4 py-3">
+                    <span className="sr-only">Marcar</span>
+                  </th>
+                ) : null}
                 <th className="px-4 py-3 font-medium">Anúncio</th>
                 <th className="px-4 py-3 font-medium">Conta</th>
                 <th className="px-4 py-3 text-right font-medium">Preço</th>
@@ -240,6 +260,18 @@ async function Listings({ searchParams }: Pick<PageProps<"/anuncios">, "searchPa
                 const statusInfo = listingStatusLabel(listing.status);
                 return (
                   <tr key={listing.id} className="border-b border-border align-top last:border-0">
+                    {canEdit ? (
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          name="externalId"
+                          value={listing.externalId}
+                          form={REPLICATE_FORM_ID}
+                          aria-label={`Marcar ${listing.externalId}`}
+                          className="size-4 accent-brand"
+                        />
+                      </td>
+                    ) : null}
                     <td className="px-4 py-3">
                       <div className="flex gap-3">
                         {listing.thumbnailUrl ? (
