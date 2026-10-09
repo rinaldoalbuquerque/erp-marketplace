@@ -226,6 +226,13 @@ async function Listings({ searchParams }: Pick<PageProps<"/anuncios">, "searchPa
       {canEdit && result.listings.length > 0 ? (
         <ReplicateBar
           accounts={accounts.map((account) => ({ id: account.id, nickname: account.nickname }))}
+          filters={{
+            search: search || undefined,
+            status: statusFilter ?? undefined,
+            accountIds: accountIds.length ? accountIds : undefined,
+            familyId: familyId || undefined,
+          }}
+          filterTotal={result.total}
         />
       ) : null}
 
@@ -264,8 +271,9 @@ async function Listings({ searchParams }: Pick<PageProps<"/anuncios">, "searchPa
                       <td className="px-4 py-3">
                         <input
                           type="checkbox"
-                          name="externalId"
-                          value={listing.externalId}
+                          name="listingId"
+                          value={listing.id}
+                          data-external={listing.externalId}
                           form={REPLICATE_FORM_ID}
                           aria-label={`Marcar ${listing.externalId}`}
                           className="size-4 accent-brand"

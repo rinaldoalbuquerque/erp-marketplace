@@ -1,11 +1,12 @@
 "use client";
 
-import { Copy } from "lucide-react";
+import { Copy, PencilRuler } from "lucide-react";
 import { useState, useTransition } from "react";
 
 import { LISTING_TYPES, type ListingTypeId } from "@/domain/listings/canonical";
 
 import { BatchProgressPanel } from "./batch-progress";
+import { BulkEditPanel, type BulkFilters } from "./bulk-edit-panel";
 import { startReplicateAction } from "./copy-actions";
 
 export const REPLICATE_FORM_ID = "replicate-form";
@@ -13,14 +14,33 @@ export const REPLICATE_FORM_ID = "replicate-form";
 function selected() {
   return [
     ...document.querySelectorAll<HTMLInputElement>(
-      `input[form="${REPLICATE_FORM_ID}"][name="externalId"]:checked`,
+      `input[form="${REPLICATE_FORM_ID}"][name="listingId"]:checked`,
     ),
-  ].map((box) => box.value);
+  ].map((box) => box.dataset.external ?? "");
 }
 
-/** Copies the checked listings into drafts of an account (background batch). */
-export function ReplicateBar({ accounts }: { accounts: Array<{ id: string; nickname: string }> }) {
+const checkedIds = () =>
+  [
+    ...document.querySelectorAll<HTMLInputElement>(
+      `input[form="${REPLICATE_FORM_ID}"][name="listingId"]:checked`,
+    ),
+  ].map((box) => box.value);
+
+/**
+ * Selection bar of the listings page: copies the checked listings into drafts of
+ * an account, or edits them in bulk (both run as background batches).
+ */
+export function ReplicateBar({
+  accounts,
+  filters,
+  filterTotal,
+}: {
+  accounts: Array<{ id: string; nickname: string }>;
+  filters: BulkFilters;
+  filterTotal: number;
+}) {
   const [open, setOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [percent, setPercent] = useState("0");
   const [roundTo90, setRoundTo90] = useState(false);
@@ -60,7 +80,7 @@ export function ReplicateBar({ accounts }: { accounts: Array<{ id: string; nickn
 
   const selectAll = (checked: boolean) =>
     document
-      .querySelectorAll<HTMLInputElement>(`input[form="${REPLICATE_FORM_ID}"][name="externalId"]`)
+      .querySelectorAll<HTMLInputElement>(`input[form="${REPLICATE_FORM_ID}"][name="listingId"]`)
       .forEach((box) => {
         box.checked = checked;
       });
@@ -84,11 +104,25 @@ export function ReplicateBar({ accounts }: { accounts: Array<{ id: string; nickn
           </label>
           <button
             type="button"
-            onClick={() => setOpen((value) => !value)}
+            onClick={() => {
+              setOpen((value) => !value);
+              setBulkOpen(false);
+            }}
             className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3 font-medium text-ink hover:bg-surface-2"
           >
             <Copy className="size-4" aria-hidden="true" />
             Copiar para…
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setBulkOpen((value) => !value);
+              setOpen(false);
+            }}
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3 font-medium text-ink hover:bg-surface-2"
+          >
+            <PencilRuler className="size-4" aria-hidden="true" />
+            Editar em massa
           </button>
           {message ? <span className="text-signal-ink">{message}</span> : null}
         </div>
@@ -154,6 +188,9 @@ export function ReplicateBar({ accounts }: { accounts: Array<{ id: string; nickn
               </span>
             </div>
           </div>
+        ) : null}
+        {bulkOpen ? (
+          <BulkEditPanel filters={filters} filterTotal={filterTotal} selectedIds={checkedIds} />
         ) : null}
       </form>
     </>

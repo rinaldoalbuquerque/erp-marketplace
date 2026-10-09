@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 
 import type { BatchProgress } from "@/server/listings/batch-service";
 
+import { bulkUndoInfoAction, undoBulkAction } from "./bulk-actions";
 import { continueBatchAction, getBatchProgressAction } from "./copy-actions";
 
 const POLL_MS = 2000;
@@ -24,11 +25,22 @@ const DONE_LABEL = {
 } as const;
 
 /** Live progress and final report of a replicate/publish batch. */
-export function BatchProgressPanel({ jobId, onClose }: { jobId: string; onClose?: () => void }) {
+export function BatchProgressPanel({
+  jobId,
+  onClose,
+  onUndoStarted,
+}: {
+  jobId: string;
+  onClose?: () => void;
+  /** Bulk edit: called with the new batch ids after "Desfazer". */
+  onUndoStarted?: (jobIds: string[]) => void;
+}) {
   const router = useRouter();
   const [progress, setProgress] = useState<BatchProgress | null>(null);
   const [pending, startTransition] = useTransition();
   const continuedFor = useRef(-1);
+  const [undo, setUndo] = useState<{ canUndo: boolean; isUndo: boolean } | null>(null);
+  const [undoMessage, setUndoMessage] = useState<string | null>(null);
 
   const active = progress === null || ["queued", "running", "paused"].includes(progress.status);
 
@@ -44,7 +56,10 @@ export function BatchProgressPanel({ jobId, onClose }: { jobId: string; onClose?
         continuedFor.current = next.processed;
         await continueBatchAction(jobId);
       }
-      if (next.status === "completed" || next.status === "failed") router.refresh();
+      if (next.status === "completed" || next.status === "failed") {
+        if (next.type === "bulk_edit_listings") setUndo(await bulkUndoInfoAction(jobId));
+        router.refresh();
+      }
     };
     void tick();
     const timer = setInterval(tick, POLL_MS);
@@ -58,6 +73,23 @@ export function BatchProgressPanel({ jobId, onClose }: { jobId: string; onClose?
     startTransition(async () => {
       await continueBatchAction(jobId);
       if (progress) setProgress({ ...progress, status: "queued", lastError: null });
+    });
+  }
+
+  function startUndo() {
+    if (
+      !window.confirm("Desfazer: voltar cada anúncio alterado por este lote ao valor anterior?")
+    ) {
+      return;
+    }
+    startTransition(async () => {
+      const result = await undoBulkAction(jobId);
+      if (!result.ok) {
+        setUndoMessage(result.message);
+        return;
+      }
+      setUndo({ canUndo: false, isUndo: false });
+      onUndoStarted?.(result.jobIds);
     });
   }
 
@@ -143,6 +175,18 @@ export function BatchProgressPanel({ jobId, onClose }: { jobId: string; onClose?
           </ul>
         </details>
       ) : null}
+      {undo?.isUndo ? <p className="text-muted">Este lote desfez uma edição em massa.</p> : null}
+      {undo?.canUndo ? (
+        <button
+          type="button"
+          onClick={startUndo}
+          disabled={pending}
+          className="h-8 self-start rounded-lg border border-border bg-surface px-3 text-xs font-medium text-ink hover:bg-surface-2"
+        >
+          Desfazer esta edição
+        </button>
+      ) : null}
+      {undoMessage ? <p className="text-signal-ink">{undoMessage}</p> : null}
       {isCopy && progress.status === "completed" && progress.done > 0 ? (
         <Link
           href={`/anuncios/rascunhos?lote=${progress.jobId}`}
