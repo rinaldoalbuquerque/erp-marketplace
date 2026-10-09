@@ -200,17 +200,28 @@ export function EditListingForm({
       const result = await saveListingEditAction(listingId, payload);
       setErrors({});
       switch (result.status) {
-        case "saved":
+        case "saved": {
+          const notices = result.notices.length
+            ? [
+                "Avisos do Mercado Livre sobre este anúncio (não impediram a alteração):",
+                ...result.notices.map((notice) => `• ${notice}`),
+              ]
+            : [];
           setMessage(
-            result.warnings.length
+            result.notApplied.length
               ? {
                   tone: "signal",
-                  lines: ["Salvo, mas o Mercado Livre ignorou parte:", ...result.warnings],
+                  lines: [
+                    "Salvo, mas nem tudo foi aplicado pelo Mercado Livre:",
+                    ...result.notApplied.map((item) => `• ${item}`),
+                    ...notices,
+                  ],
                 }
-              : { tone: "success", lines: ["Alterações salvas no Mercado Livre."] },
+              : { tone: "success", lines: ["Alterações salvas no Mercado Livre.", ...notices] },
           );
           router.refresh();
           break;
+        }
         case "no_changes":
           setMessage({ tone: "signal", lines: ["Nada mudou: não havia o que enviar."] });
           break;

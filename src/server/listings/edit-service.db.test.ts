@@ -193,7 +193,7 @@ describe("listing edit against the database", () => {
       },
       { key, connectorFor: () => sim.connector },
     );
-    expect(result).toMatchObject({ status: "saved", warnings: [] });
+    expect(result).toMatchObject({ status: "saved", notApplied: [], notices: [] });
     expect(sim.updates).toEqual([{ priceCents: 2500 }]);
     expect(sim.descriptions).toEqual([]);
     const local = await db.listing.findUniqueOrThrow({ where: { id: listingId } });
@@ -260,17 +260,41 @@ describe("listing edit against the database", () => {
     expect(edit).toMatchObject({ status: "failed", message: "The price is below the minimum" });
   });
 
-  it("warnings (e.g. price automation) are saved as a partial edit", async () => {
+  it("a general marketplace notice is informational: the edit is a success", async () => {
+    // Real notices seen on the test account: shipping setup, unrelated to the edit.
     const sim = setup({ listing: marketplaceListing(), description: null });
-    sim.connector.updateListing = async () => ({ warnings: ["Price not updated"] });
+    const applyPrice = sim.connector.updateListing;
+    sim.connector.updateListing = async (token, id, patch) => {
+      await applyPrice(token, id, patch);
+      return { warnings: ["A conta não tem o Mercado Envios 1 (ME1) ativado."] };
+    };
     const result = await saveEdit(
       ctx(),
       listingId,
       { versionStamp: STAMP, priceCents: 3000, description: "Nova descrição" },
       { key, connectorFor: () => sim.connector },
     );
-    expect(result).toMatchObject({ status: "saved", warnings: ["Price not updated"] });
+    expect(result).toMatchObject({
+      status: "saved",
+      notApplied: [],
+      notices: ["A conta não tem o Mercado Envios 1 (ME1) ativado."],
+    });
     expect(sim.descriptions).toEqual(["Nova descrição"]);
+    expect((await db.listingEdit.findFirstOrThrow({ where: { listingId } })).status).toBe(
+      "success",
+    );
+  });
+
+  it("a price the marketplace silently kept is reported as not applied (partial)", async () => {
+    const sim = setup({ listing: marketplaceListing(), description: null });
+    sim.connector.updateListing = async () => ({ warnings: [] }); // 200 OK, price unchanged
+    const result = await saveEdit(
+      ctx(),
+      listingId,
+      { versionStamp: STAMP, priceCents: 3000 },
+      { key, connectorFor: () => sim.connector },
+    );
+    expect(result).toMatchObject({ status: "saved", notApplied: [expect.stringMatching(/preço/)] });
     expect((await db.listingEdit.findFirstOrThrow({ where: { listingId } })).status).toBe(
       "partial",
     );

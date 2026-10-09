@@ -126,7 +126,14 @@ export type EditInput = {
 type Change = { field: string; before: unknown; after: unknown };
 
 export type SaveEditResult =
-  | { status: "saved"; warnings: string[]; changes: Change[] }
+  | {
+      status: "saved";
+      /** Sent but not applied by the marketplace (e.g. price under automation). */
+      notApplied: string[];
+      /** General marketplace remarks about the listing (informational). */
+      notices: string[];
+      changes: Change[];
+    }
   | { status: "no_changes" }
   | { status: "invalid"; fieldErrors: Record<string, string> }
   | { status: "refused"; causes: string[] }
@@ -224,6 +231,34 @@ export function buildPatch(
   return { patch, description, changes, fieldErrors };
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  active: "ativo",
+  paused: "pausado",
+  closed: "finalizado",
+};
+
+/**
+ * Fields the marketplace may accept with 200 but not apply (price under price
+ * automation; status depending on stock/moderation). Compared with the item
+ * read back after saving.
+ */
+export function checkApplied(patch: ListingPatch, after: EditableListing): string[] {
+  const missing: string[] = [];
+  if (patch.priceCents !== undefined && after.listing.priceCents !== patch.priceCents) {
+    missing.push(
+      "O preço não foi alterado pelo Mercado Livre (anúncio com automatização de preços ou regra da conta).",
+    );
+  }
+  if (patch.status !== undefined && after.listing.status !== patch.status) {
+    missing.push(
+      `O status não mudou para ${STATUS_LABELS[patch.status] ?? patch.status} (o Mercado Livre manteve “${
+        STATUS_LABELS[after.listing.status] ?? after.listing.status
+      }”).`,
+    );
+  }
+  return missing;
+}
+
 async function record(
   ctx: Context,
   listingId: string,
@@ -271,7 +306,14 @@ export async function saveEdit(
     }
     if (changes.length === 0) return { status: "no_changes" };
 
-    const { warnings } = await connector.updateListing(token, target.externalId, built.patch);
+    // `notices`: general remarks from the marketplace about the item (e.g.
+    // shipping setup); they do not mean the change was ignored.
+    const { warnings: notices } = await connector.updateListing(
+      token,
+      target.externalId,
+      built.patch,
+    );
+    const notApplied: string[] = [];
     if (built.description !== undefined) {
       try {
         await connector.updateListingDescription(
@@ -282,12 +324,13 @@ export async function saveEdit(
         );
       } catch (error) {
         if (error instanceof MarketplaceValidationError) {
-          warnings.push(`Descrição não salva: ${error.causes.join("; ")}`);
+          notApplied.push(`Descrição não salva: ${error.causes.join("; ")}`);
         } else throw error;
       }
     }
 
-    // Refresh the local copy with what the marketplace now has.
+    // Read back what the marketplace now has: refresh the local copy and check
+    // that the fields it may silently ignore really changed.
     const after = await connector.getListingForEdit(token, target.externalId);
     await saveListing(
       ctx.tdb,
@@ -297,14 +340,16 @@ export async function saveEdit(
       after.listing,
       new Date(),
     );
+    notApplied.push(...checkApplied(built.patch, after));
+
     await record(
       ctx,
       listingId,
       changes,
-      warnings.length ? "partial" : "success",
-      warnings.join("; ") || null,
+      notApplied.length ? "partial" : "success",
+      [...notApplied, ...notices].join("; ") || null,
     );
-    return { status: "saved", warnings, changes };
+    return { status: "saved", notApplied, notices, changes };
   } catch (error) {
     if (error instanceof MarketplaceValidationError) {
       await record(ctx, listingId, changes, "failed", error.causes.join("; "));

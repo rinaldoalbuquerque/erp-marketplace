@@ -15,6 +15,7 @@ import {
 } from "../types";
 import { ML_API_BASE, mlFetch, type FetchFn } from "./http";
 import { normalizeItem } from "./items";
+import { translateMlMessage } from "./messages";
 
 // Editing Mercado Livre listings.
 // - Category attributes: GET /categories/{CATEGORY_ID}/attributes
@@ -273,7 +274,8 @@ export async function updateListing(
   } catch {
     // empty body
   }
-  return { warnings: readWarnings(result) };
+  // General notices about the item (e.g. shipping setup); translated when known.
+  return { warnings: readWarnings(result).map(translateMlMessage) };
 }
 
 export async function updateListingDescription(
