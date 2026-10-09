@@ -49,7 +49,6 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         href: "/pedidos",
         icon: "orders",
         permission: "orders.view",
-        comingSoon: true,
       },
       {
         label: "Separação",

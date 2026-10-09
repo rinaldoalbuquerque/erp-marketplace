@@ -104,6 +104,8 @@ export function listAccounts(tdb: TenantDb) {
       allowWrites: true,
       stockSyncEnabled: true,
       multiWarehouse: true,
+      orderStockEnabled: true,
+      orderStockSince: true,
       lastError: true,
       lastSyncAt: true,
       createdAt: true,

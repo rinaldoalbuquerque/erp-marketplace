@@ -14,6 +14,7 @@ import { getTenantContext } from "@/server/tenant/tenant-db";
 import { disconnectAccountAction, setAllowWritesAction, testConnectionAction } from "./actions";
 import type { ImportProgress } from "./import-actions";
 import { ImportPanel } from "./import-panel";
+import { OrderStockPanel } from "./order-stock-panel";
 import { StockSyncPanel } from "./stock-sync-panel";
 
 export const metadata: Metadata = { title: "Contas de marketplace" };
@@ -125,6 +126,14 @@ async function Accounts({ searchParams }: Pick<PageProps<"/contas">, "searchPara
     notice = TEST_MESSAGES[param(query.teste)] ?? null;
   } else if (param(query.desconectada)) {
     notice = { tone: "success", text: "Conta desconectada. Os tokens foram apagados do ERP." };
+  } else if (param(query.vendas)) {
+    notice = {
+      tone: "success",
+      text:
+        param(query.vendas) === "ligado"
+          ? "Baixa de estoque por vendas ligada: vendas confirmadas a partir de agora baixam o estoque."
+          : "Baixa de estoque por vendas desligada.",
+    };
   } else if (param(query.estoque)) {
     notice = STOCK_MESSAGES[param(query.estoque)] ?? null;
   } else if (param(query.alteracoes)) {
@@ -258,6 +267,14 @@ async function Accounts({ searchParams }: Pick<PageProps<"/contas">, "searchPara
                   enabled={account.stockSyncEnabled}
                   multiWarehouse={account.multiWarehouse}
                   counts={pushCounts.get(account.id) ?? null}
+                />
+              ) : null}
+
+              {account.status === "active" ? (
+                <OrderStockPanel
+                  accountId={account.id}
+                  enabled={account.orderStockEnabled}
+                  since={account.orderStockSince}
                 />
               ) : null}
 
