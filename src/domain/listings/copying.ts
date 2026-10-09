@@ -16,15 +16,20 @@ export type PriceOptions = {
   roundTo90: boolean;
 };
 
+/** Nearest price ending in ,90 (32,47 -> 32,90; 32,95 -> 32,90; 33,45 -> 33,90). */
+export function roundTo90(cents: number): number {
+  const reais = Math.floor(cents / 100);
+  const candidates = [reais - 1, reais, reais + 1].map((value) => value * 100 + 90);
+  return candidates.reduce((best, candidate) =>
+    Math.abs(candidate - cents) < Math.abs(best - cents) ? candidate : best,
+  );
+}
+
+/** Lowest price the ERP sends (R$ 1,00). */
+export const MIN_PRICE_CENTS = 100;
+
 /** New price for a copy. Never below R$ 1,00. */
-export function adjustPrice(cents: number, { percent, roundTo90 }: PriceOptions): number {
-  let next = Math.round(cents * (1 + percent / 100));
-  if (roundTo90) {
-    const reais = Math.floor(next / 100);
-    const candidates = [reais - 1, reais, reais + 1].map((value) => value * 100 + 90);
-    next = candidates.reduce((best, candidate) =>
-      Math.abs(candidate - next) < Math.abs(best - next) ? candidate : best,
-    );
-  }
-  return Math.max(100, next);
+export function adjustPrice(cents: number, options: PriceOptions): number {
+  const next = Math.round(cents * (1 + options.percent / 100));
+  return Math.max(MIN_PRICE_CENTS, options.roundTo90 ? roundTo90(next) : next);
 }
