@@ -8,6 +8,7 @@ import { tenantDb } from "@/server/tenant/tenant-db";
 
 import type { Prisma } from "@/generated/prisma/client";
 
+import { applyBulkItem } from "./bulk-edit-service";
 import { copyToDraft, type CopyDeps } from "./copy-service";
 import { publishDraft } from "./draft-service";
 import { STALE_AFTER_MS } from "./import-service";
@@ -26,6 +27,11 @@ import { STALE_AFTER_MS } from "./import-service";
 export type ReplicateParams = { price: PriceOptions | null; listingTypeId: ListingTypeId | null };
 
 const MAX_ITEMS = 500;
+const BATCH_TYPES: Array<"replicate_listings" | "publish_drafts" | "bulk_edit_listings"> = [
+  "replicate_listings",
+  "publish_drafts",
+  "bulk_edit_listings",
+];
 const MAX_REPORTED_ERRORS = 100;
 
 export type StartResult =
@@ -97,7 +103,7 @@ async function claim(organizationId: string, jobId: string, now: Date) {
     where: {
       id: jobId,
       organizationId,
-      type: { in: ["replicate_listings", "publish_drafts"] },
+      type: { in: BATCH_TYPES },
       OR: [
         { status: { in: ["queued", "paused"] } },
         { status: "running", heartbeatAt: { lt: staleBefore } },
@@ -160,6 +166,7 @@ export async function runBatchRound(
   const publishedListings: string[] = [];
 
   async function process(id: string): Promise<Outcome> {
+    if (job!.type === "bulk_edit_listings") return applyBulkItem(ctx, jobId, id, deps);
     if (job!.type === "replicate_listings") {
       const result = await copyToDraft(
         ctx,
@@ -282,7 +289,7 @@ export async function runBatchRound(
 /** Progress of a batch job (for the panel). */
 export async function batchProgress(organizationId: string, jobId: string) {
   const job = await db.syncJob.findFirst({
-    where: { id: jobId, organizationId, type: { in: ["replicate_listings", "publish_drafts"] } },
+    where: { id: jobId, organizationId, type: { in: BATCH_TYPES } },
     select: {
       id: true,
       type: true,
@@ -300,7 +307,7 @@ export async function batchProgress(organizationId: string, jobId: string) {
   if (!job) return null;
   return {
     jobId: job.id,
-    type: job.type as "replicate_listings" | "publish_drafts",
+    type: job.type as (typeof BATCH_TYPES)[number],
     status: job.status,
     total: job.total,
     processed: job.processed,
