@@ -19,6 +19,19 @@ export async function testConnectionAction(accountId: string) {
   );
 }
 
+/** Turns on/off "the ERP may change listings of this account" (off by default). */
+export async function setAllowWritesAction(accountId: string, allow: boolean) {
+  const member = await requirePermission("marketplaceAccounts.manage");
+  const { tdb } = await getTenantContext(member);
+  await tdb.marketplaceAccount.updateMany({
+    where: { id: accountId },
+    data: { allowWrites: allow },
+  });
+  revalidatePath("/contas");
+  revalidatePath("/anuncios");
+  redirect(`/contas?alteracoes=${allow ? "ligadas" : "desligadas"}`);
+}
+
 export async function disconnectAccountAction(accountId: string) {
   const member = await requirePermission("marketplaceAccounts.manage");
   const { tdb } = await getTenantContext(member);

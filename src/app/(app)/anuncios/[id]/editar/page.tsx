@@ -1,0 +1,210 @@
+import { ExternalLink } from "lucide-react";
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import { Suspense } from "react";
+import { z } from "zod";
+
+import { ButtonLink, PageHeader } from "@/components/ui/page-header";
+import { can } from "@/domain/auth/permissions";
+import { toInput, type AttributeInput } from "@/domain/listings/attributes";
+import { centsToInput } from "@/domain/products/money";
+import { requirePermission } from "@/server/auth/session";
+import { loadForEdit } from "@/server/listings/edit-service";
+import { getTenantContext } from "@/server/tenant/tenant-db";
+
+import { EditListingForm, type EditFormInitial } from "./edit-form";
+
+export const metadata: Metadata = { title: "Editar anúncio" };
+
+const DATE_TIME = new Intl.DateTimeFormat("pt-BR", {
+  dateStyle: "short",
+  timeStyle: "short",
+  timeZone: "America/Sao_Paulo",
+});
+
+const FIELD_LABELS: Record<string, string> = {
+  title: "Título",
+  familyName: "Nome da família",
+  price: "Preço",
+  status: "Status",
+  description: "Descrição",
+};
+
+const EDIT_STATUS = {
+  success: { label: "Salvo", className: "text-success" },
+  partial: { label: "Salvo em parte", className: "text-signal-ink" },
+  failed: { label: "Recusado", className: "text-danger" },
+} as const;
+
+export default function EditListingPage({ params }: PageProps<"/anuncios/[id]/editar">) {
+  return (
+    <Suspense
+      fallback={<p className="text-sm text-muted">Buscando a versão atual no Mercado Livre…</p>}
+    >
+      <EditListing params={params} />
+    </Suspense>
+  );
+}
+
+async function EditListing({ params }: Pick<PageProps<"/anuncios/[id]/editar">, "params">) {
+  const member = await requirePermission("listings.edit");
+  const { tdb } = await getTenantContext(member);
+  const { id } = await params;
+  if (!z.uuid().safeParse(id).success) notFound();
+
+  const result = await loadForEdit(
+    {
+      tdb,
+      organizationId: member.organizationId,
+      userId: member.user.id,
+      canClose: can(member.role, "listings.delete"),
+    },
+    id,
+  );
+  if (result.status === "not_found") notFound();
+  if (result.status !== "ok") {
+    const messages = {
+      writes_disabled:
+        "As alterações pelo ERP estão bloqueadas para esta conta. Libere em Contas de marketplace.",
+      reconnect: "A conta precisa ser reconectada em Contas de marketplace.",
+      marketplace_error: "Não foi possível buscar o anúncio no Mercado Livre agora. Tente de novo.",
+    } as const;
+    return (
+      <>
+        <PageHeader title="Editar anúncio" back={{ href: "/anuncios", label: "Anúncios" }} />
+        <div className="rounded-xl border-l-4 border-signal bg-signal-soft p-5 text-sm text-signal-ink">
+          <p>{messages[result.status]}</p>
+          <div className="mt-3">
+            <ButtonLink href="/contas" variant="secondary">
+              Ir para Contas de marketplace
+            </ButtonLink>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  const { editable, definitions } = result;
+  const { listing } = editable;
+  const byId = new Map(editable.attributes.map((value) => [value.id, value]));
+  const attributeInputs: Record<string, AttributeInput> = {};
+  const readOnlyValues: Record<string, string> = {};
+  for (const definition of definitions) {
+    const current = byId.get(definition.id);
+    if (definition.readOnly) {
+      if (current?.valueName) readOnlyValues[definition.id] = current.valueName;
+    } else {
+      attributeInputs[definition.id] = toInput(definition, current);
+    }
+  }
+  const initial: EditFormInitial = {
+    versionStamp: result.versionStamp,
+    title: listing.title,
+    familyName: listing.familyName ?? "",
+    price: centsToInput(listing.priceCents),
+    status: listing.status,
+    description: editable.description ?? "",
+    attributes: attributeInputs,
+    readOnlyValues,
+  };
+
+  const history = await tdb.listingEdit.findMany({
+    where: { listingId: id },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+    select: {
+      id: true,
+      createdAt: true,
+      status: true,
+      message: true,
+      changes: true,
+      user: { select: { fullName: true } },
+    },
+  });
+
+  return (
+    <>
+      <PageHeader
+        title="Editar anúncio"
+        description={
+          <span className="flex flex-wrap items-center gap-x-3">
+            <span className="tabular-nums">{listing.externalId}</span>
+            <span>Conta {result.accountNickname}</span>
+            {listing.permalink ? (
+              <a
+                href={listing.permalink}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-brand hover:underline"
+              >
+                Ver no Mercado Livre <ExternalLink className="size-3" aria-hidden="true" />
+              </a>
+            ) : null}
+          </span>
+        }
+        back={{ href: "/anuncios", label: "Anúncios" }}
+      />
+
+      <div className="mb-5 flex items-center gap-3 rounded-xl border border-border bg-surface p-4">
+        {listing.thumbnailUrl ? (
+          // Marketplace CDN thumbnail (see /anuncios).
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={listing.thumbnailUrl}
+            alt=""
+            width={56}
+            height={56}
+            className="size-14 rounded-md border border-border bg-white object-contain"
+          />
+        ) : null}
+        <div className="min-w-0">
+          <p className="font-medium text-ink">{listing.title}</p>
+          <p className="text-xs text-muted">
+            {listing.listingModel === "user_products" ? "User Products" : "Tradicional"}
+            {listing.soldQuantity ? `, ${listing.soldQuantity} vendidos` : ""}. Os dados abaixo
+            vieram agora do Mercado Livre.
+          </p>
+        </div>
+      </div>
+
+      <EditListingForm
+        listingId={id}
+        initial={initial}
+        definitions={definitions}
+        rules={editable.rules}
+        canClose={can(member.role, "listings.delete")}
+      />
+
+      {history.length ? (
+        <section className="mt-8 max-w-4xl">
+          <h2 className="mb-3 text-xl font-semibold text-ink">Histórico de alterações</h2>
+          <ul className="flex flex-col gap-2 text-sm">
+            {history.map((edit) => {
+              const changes = (Array.isArray(edit.changes) ? edit.changes : []) as Array<{
+                field: string;
+              }>;
+              const fields = changes.map((change) =>
+                change.field.startsWith("attribute:")
+                  ? change.field.slice("attribute:".length)
+                  : (FIELD_LABELS[change.field] ?? change.field),
+              );
+              return (
+                <li key={edit.id} className="rounded-lg border border-border bg-surface px-3 py-2">
+                  <span className="text-muted tabular-nums">
+                    {DATE_TIME.format(edit.createdAt)}
+                  </span>{" "}
+                  <span className={`font-medium ${EDIT_STATUS[edit.status].className}`}>
+                    {EDIT_STATUS[edit.status].label}
+                  </span>
+                  {edit.user ? <span className="text-muted"> por {edit.user.fullName}</span> : null}
+                  <span className="block text-ink">{fields.join(", ") || "—"}</span>
+                  {edit.message ? <span className="block text-muted">{edit.message}</span> : null}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+    </>
+  );
+}

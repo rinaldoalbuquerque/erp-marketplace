@@ -9,7 +9,7 @@ import { listAccounts } from "@/server/marketplaces/accounts";
 import { env } from "@/server/env";
 import { getTenantContext } from "@/server/tenant/tenant-db";
 
-import { disconnectAccountAction, testConnectionAction } from "./actions";
+import { disconnectAccountAction, setAllowWritesAction, testConnectionAction } from "./actions";
 import type { ImportProgress } from "./import-actions";
 import { ImportPanel } from "./import-panel";
 
@@ -101,6 +101,14 @@ async function Accounts({ searchParams }: Pick<PageProps<"/contas">, "searchPara
     notice = TEST_MESSAGES[param(query.teste)] ?? null;
   } else if (param(query.desconectada)) {
     notice = { tone: "success", text: "Conta desconectada. Os tokens foram apagados do ERP." };
+  } else if (param(query.alteracoes)) {
+    notice = {
+      tone: "success",
+      text:
+        param(query.alteracoes) === "ligadas"
+          ? "Alterações liberadas: o ERP pode editar os anúncios desta conta."
+          : "Alterações bloqueadas: o ERP não altera mais os anúncios desta conta.",
+    };
   }
 
   return (
@@ -189,6 +197,32 @@ async function Accounts({ searchParams }: Pick<PageProps<"/contas">, "searchPara
                   accountId={account.id}
                   initial={toProgress(importJobs.get(account.id))}
                 />
+              ) : null}
+
+              {account.status === "active" ? (
+                <form
+                  action={setAllowWritesAction.bind(null, account.id, !account.allowWrites)}
+                  className={`flex flex-col gap-2 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between ${
+                    account.allowWrites ? "border-signal bg-signal-soft" : "border-border bg-bg"
+                  }`}
+                >
+                  <div className="text-sm">
+                    <p className="font-medium text-ink">
+                      Alterações pelo ERP: {account.allowWrites ? "liberadas" : "bloqueadas"}
+                    </p>
+                    <p className={account.allowWrites ? "text-signal-ink" : "text-muted"}>
+                      {account.allowWrites
+                        ? "O ERP pode editar e pausar anúncios desta conta no Mercado Livre."
+                        : "O ERP só lê esta conta. Libere depois de testar numa conta de teste."}
+                    </p>
+                  </div>
+                  <button
+                    type="submit"
+                    className="inline-flex h-9 shrink-0 items-center rounded-lg border border-border bg-surface px-3 text-sm font-medium text-ink hover:bg-surface-2"
+                  >
+                    {account.allowWrites ? "Bloquear alterações" : "Liberar alterações"}
+                  </button>
+                </form>
               ) : null}
 
               <div className="mt-auto flex flex-wrap gap-2">

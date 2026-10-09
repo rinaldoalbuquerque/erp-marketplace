@@ -77,7 +77,7 @@ export async function listListings(tdb: TenantDb, filters: ListingFilters) {
         familyName: true,
         sellerSku: true,
         syncedAt: true,
-        account: { select: { id: true, nickname: true } },
+        account: { select: { id: true, nickname: true, allowWrites: true } },
         _count: { select: { variations: true, mappings: true } },
       },
     }),

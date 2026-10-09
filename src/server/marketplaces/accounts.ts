@@ -100,6 +100,7 @@ export function listAccounts(tdb: TenantDb) {
       siteId: true,
       listingModel: true,
       status: true,
+      allowWrites: true,
       lastError: true,
       lastSyncAt: true,
       createdAt: true,

@@ -1,9 +1,10 @@
-import { ExternalLink, Search } from "lucide-react";
+import { ExternalLink, Pencil, Search } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 
 import { ButtonLink, PageHeader } from "@/components/ui/page-header";
+import { can } from "@/domain/auth/permissions";
 import { LISTING_MODEL_SHORT, listingStatusLabel, type StatusTone } from "@/domain/listings/labels";
 import { formatCents } from "@/domain/products/money";
 import { requirePermission } from "@/server/auth/session";
@@ -53,6 +54,7 @@ const many = (value: string | string[] | undefined) =>
 
 async function Listings({ searchParams }: Pick<PageProps<"/anuncios">, "searchParams">) {
   const member = await requirePermission("listings.view");
+  const canEdit = can(member.role, "listings.edit");
   const { tdb } = await getTenantContext(member);
   const params = await searchParams;
 
@@ -270,6 +272,15 @@ async function Listings({ searchParams }: Pick<PageProps<"/anuncios">, "searchPa
                               >
                                 Ver no ML <ExternalLink className="size-3" aria-hidden="true" />
                               </a>
+                            ) : null}
+                            {canEdit && listing.account.allowWrites ? (
+                              <Link
+                                href={`/anuncios/${listing.id}/editar`}
+                                className="inline-flex items-center gap-0.5 font-medium text-brand hover:underline"
+                              >
+                                <Pencil className="size-3" aria-hidden="true" />
+                                Editar
+                              </Link>
                             ) : null}
                           </p>
                         </div>
