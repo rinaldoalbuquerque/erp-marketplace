@@ -152,10 +152,19 @@ ERP para gerenciar marketplaces, começando pelo Mercado Livre, com foco em **pr
 - [ ] Edição em massa (pode entrar junto da 2B/2D)
 
 ### Fase 3 — Pedidos
-- [ ] Receber pedidos e envios por notificação (webhook), com consulta periódica de reforço
-- [ ] Lista, busca, abas por etapa, ações em lote
-- [ ] Baixa automática de estoque (idempotente)
-- [ ] Separar produtos com leitor
+- [x] **3A** Receber pedidos e envios por notificação (webhook), com consulta periódica de reforço
+  - Avisos do ML (`orders_v2` e `shipments`) em `/api/notificacoes/mercadolivre`: grava na caixa `marketplace_notifications` e responde 200 na hora (o ML exige < 500 ms); o pedido é lido depois, com o nosso token. Uma linha por recurso: aviso repetido não duplica.
+  - Reforço: ao abrir Pedidos (a cada 5 min por conta), botão "Buscar vendas agora" e rotina diária da Vercel (`/api/cron/pedidos`, protegida por `CRON_SECRET`). Busca `/orders/search` por data de alteração (primeira vez: últimos 2 dias).
+  - Confirmado em 09/10/2026 com a BELA: 41 vendas reais lidas certas (Full, normal, cancelada, carrinho) e avisos chegando em produção.
+- [x] Baixa automática de estoque (idempotente)
+  - Chave por conta "Vendas baixam o estoque do ERP" (desligada por padrão); só vendas confirmadas (`date_closed`) depois de ligar. Full não baixa; cancelado devolve; devolução parcial/reclamação não devolve sozinho (entrada manual). Anúncio sem SKU fica marcado "Sem SKU vinculado".
+  - Chave de idempotência por linha do pedido (`order:{conta}:{pedido}:{item}:{variação}:sale|return`); depois da baixa, o novo saldo vai para os outros anúncios (fila de estoque).
+  - Ligada na BELA em 09/10/2026 (estoque só no ERP: alterações e sincronização da BELA continuam desligadas). Falta ver a primeira venda real de anúncio vinculado baixar o saldo.
+- [x] Lista, busca, abas por etapa do envio
+  - Envio de cada pedido (`/shipments/{id}` com `x-format-new`, prazo em `/shipments/{id}/sla`) copiado no pedido; etapa calculada: Para imprimir, Aguardando NF, Impressos, Em preparo, Enviados, Entregues, Full, Cancelados, Outros. Prazo de despacho em destaque; filtro por conta; busca por pedido, comprador, anúncio e rastreio.
+  - Etiquetas em lote (PDF ou Zebra, até 50, uma conta por vez; carrinho = uma etiqueta), com aviso de NF antes de imprimir. Ainda não testado com pedido real (imprimir é definitivo).
+- [ ] Separar produtos com leitor (3D)
+- [ ] Ações em lote além das etiquetas
 
 ### Fase 4 — NF e etiquetas
 - [ ] Testar cedo, na conta real, o que o Faturador do ML exige
