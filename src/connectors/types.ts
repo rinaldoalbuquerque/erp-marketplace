@@ -24,6 +24,8 @@ export type AccountProfile = {
   nickname: string;
   siteId: string | null;
   listingModel: ListingModel;
+  /** Seller uses multi-origin stock (needs another stock endpoint). */
+  multiWarehouse: boolean;
 };
 
 /** Variation of a listing (traditional ML listings with a "variations" array). */
@@ -56,6 +58,8 @@ export type MarketplaceListing = {
   familyId: string | null;
   familyName: string | null;
   sellerSku: string | null;
+  /** Shipping logistic, e.g. "fulfillment" (Full: stock managed by the marketplace). */
+  logisticType: string | null;
   externalUpdatedAt: Date | null;
   variations: MarketplaceListingVariation[];
   /** Full original payload (kept for the canonical model and editing). */
@@ -82,6 +86,8 @@ export interface MarketplaceConnector {
   listListingIds(accessToken: string, externalUserId: string): Promise<string[]>;
   /** Reads listings by id (the connector batches the calls). */
   getListings(accessToken: string, externalIds: string[]): Promise<ListingFetchResult[]>;
+  /** Sets the available quantity of a listing (not for Full / multi-origin). */
+  setListingStock(accessToken: string, externalId: string, quantity: number): Promise<void>;
 
   // Editing (Phase 2B)
   /** Technical sheet of a category, in the neutral shape. */

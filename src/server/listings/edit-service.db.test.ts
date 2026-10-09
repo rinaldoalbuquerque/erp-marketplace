@@ -62,6 +62,7 @@ function marketplaceListing(overrides: Partial<MarketplaceListing> = {}): Market
     familyId: null,
     familyName: null,
     sellerSku: null,
+    logisticType: "xd_drop_off",
     externalUpdatedAt: new Date("2026-10-08T10:00:00.000Z"),
     variations: [],
     raw: {},

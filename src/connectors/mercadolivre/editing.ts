@@ -293,3 +293,32 @@ export async function updateListingDescription(
   });
   if (!response.ok) await failure(response, "Description update");
 }
+
+/**
+ * Stock of a listing without multi-origin: PUT /items/{id} { available_quantity }.
+ * For User Products, Mercado Livre replicates it to every item of the same
+ * user_product_id. 0 pauses the item (out_of_stock); > 0 reactivates it unless
+ * paused by the seller. Full (fulfillment) stock can't be changed via API.
+ * https://developers.mercadolivre.com.br/pt_br/estoque-distribuido
+ * https://developers.mercadolivre.com.br/pt_br/produto-sincronizacao-de-publicacoes
+ */
+export async function setListingStock(
+  fetchFn: FetchFn,
+  accessToken: string,
+  externalId: string,
+  quantity: number,
+): Promise<void> {
+  if (!Number.isInteger(quantity) || quantity < 0) {
+    throw new RangeError("Stock quantity must be a whole number >= 0.");
+  }
+  const response = await mlFetch(
+    fetchFn,
+    `${ML_API_BASE}/items/${encodeURIComponent(externalId)}`,
+    {
+      method: "PUT",
+      headers: { ...bearer(accessToken), "content-type": "application/json" },
+      body: JSON.stringify({ available_quantity: quantity }),
+    },
+  );
+  if (!response.ok) await failure(response, "Stock update");
+}

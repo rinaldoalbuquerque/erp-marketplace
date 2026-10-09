@@ -59,5 +59,8 @@ export async function getAccountProfile(
     nickname: user.nickname ?? String(user.id),
     siteId: user.site_id ?? null,
     listingModel: listingModelFromTags(user.tags),
+    // Multi-origin sellers carry the tag warehouse_management
+    // (https://developers.mercadolivre.com.br/pt_br/estoque-distribuido).
+    multiWarehouse: (user.tags ?? []).includes("warehouse_management"),
   };
 }

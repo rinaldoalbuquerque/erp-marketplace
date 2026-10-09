@@ -33,6 +33,7 @@ const upItem = {
   seller_custom_field: null,
   attributes: [{ id: "SELLER_SKU", name: "SKU", value_name: "GAR-1L" }],
   variations: [],
+  shipping: { logistic_type: "fulfillment" },
   last_updated: "2026-10-01T10:00:00.000Z",
 };
 
@@ -149,6 +150,7 @@ describe("normalizeItem", () => {
       sellerSku: "GAR-1L",
       variations: [],
       externalUpdatedAt: new Date("2026-10-01T10:00:00.000Z"),
+      logisticType: "fulfillment",
     });
   });
 

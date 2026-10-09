@@ -148,6 +148,7 @@ export async function saveListing(
     familyId: listing.familyId,
     familyName: listing.familyName,
     sellerSku: listing.sellerSku,
+    logisticType: listing.logisticType,
     externalUpdatedAt: listing.externalUpdatedAt,
     raw: (listing.raw ?? {}) as Prisma.InputJsonValue,
     syncedAt,

@@ -4,6 +4,7 @@ import {
   causeMessages,
   getListingForEdit,
   normalizeCategoryAttributes,
+  setListingStock,
   toItemBody,
   updateListing,
   updateListingDescription,
@@ -223,6 +224,35 @@ describe("updateListing", () => {
     );
     expect(error).toBeInstanceOf(MarketplaceValidationError);
     expect((error as MarketplaceValidationError).causes).toEqual(["Required attribute BRAND"]);
+  });
+});
+
+describe("setListingStock", () => {
+  it("PUTs available_quantity on the item", async () => {
+    const fetchFn = fakeFetch({ "PUT /items/MLB1": { status: 200, body: { id: "MLB1" } } });
+    await setListingStock(fetchFn, "t", "MLB1", 7);
+    const { init } = callOf(fetchFn);
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(String(init.body))).toEqual({ available_quantity: 7 });
+  });
+
+  it("refuses negative or fractional quantities before calling", async () => {
+    const fetchFn = fakeFetch({});
+    await expect(setListingStock(fetchFn, "t", "MLB1", -1)).rejects.toThrow(RangeError);
+    await expect(setListingStock(fetchFn, "t", "MLB1", 1.5)).rejects.toThrow(RangeError);
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it("a refusal becomes a validation error", async () => {
+    const fetchFn = fakeFetch({
+      "PUT /items/MLB1": {
+        status: 400,
+        body: { error: "Item in fulfillment can not change stock" },
+      },
+    });
+    await expect(setListingStock(fetchFn, "t", "MLB1", 3)).rejects.toBeInstanceOf(
+      MarketplaceValidationError,
+    );
   });
 });
 

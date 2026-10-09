@@ -41,6 +41,7 @@ function listing(id: string, overrides: Partial<MarketplaceListing> = {}): Marke
     familyId: "F1",
     familyName: "Família",
     sellerSku: `SKU-${id}`,
+    logisticType: "xd_drop_off",
     externalUpdatedAt: null,
     variations: [],
     raw: { id },

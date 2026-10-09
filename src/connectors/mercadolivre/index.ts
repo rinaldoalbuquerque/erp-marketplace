@@ -2,6 +2,7 @@ import type { MarketplaceConnector } from "../types";
 import {
   getCategoryAttributes,
   getListingForEdit,
+  setListingStock,
   updateListing,
   updateListingDescription,
 } from "./editing";
@@ -38,6 +39,8 @@ export function createMercadoLivreConnector(
       getListingForEdit(fetchFn, accessToken, externalId),
     updateListing: (accessToken, externalId, patch) =>
       updateListing(fetchFn, accessToken, externalId, patch),
+    setListingStock: (accessToken, externalId, quantity) =>
+      setListingStock(fetchFn, accessToken, externalId, quantity),
     updateListingDescription: (accessToken, externalId, text, exists) =>
       updateListingDescription(fetchFn, accessToken, externalId, text, exists),
   };

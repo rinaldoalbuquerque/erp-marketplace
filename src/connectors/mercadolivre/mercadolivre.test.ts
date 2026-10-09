@@ -148,6 +148,7 @@ describe("account profile", () => {
       nickname: "LOJA_TESTE",
       siteId: "MLB",
       listingModel: "user_products",
+      multiWarehouse: false,
     });
   });
 
@@ -157,6 +158,15 @@ describe("account profile", () => {
       createMercadoLivreConnector(config, fetchFn).getAccountProfile("bad"),
     ).rejects.toBeInstanceOf(MarketplaceAuthError);
   });
+});
+
+it("detects multi-origin sellers by the warehouse_management tag", async () => {
+  const fetchFn = fakeFetch({
+    status: 200,
+    body: { id: 1, nickname: "X", tags: ["normal", "warehouse_management"] },
+  });
+  const profile = await createMercadoLivreConnector(config, fetchFn).getAccountProfile("t");
+  expect(profile.multiWarehouse).toBe(true);
 });
 
 describe("listingModelFromTags", () => {

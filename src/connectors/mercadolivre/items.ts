@@ -117,6 +117,7 @@ const itemSchema = z
     attributes: z.array(attributeSchema).default([]),
     variations: z.array(variationSchema).default([]),
     last_updated: z.string().nullish(),
+    shipping: z.object({ logistic_type: z.string().nullish() }).passthrough().nullish(),
   })
   .passthrough();
 
@@ -173,6 +174,9 @@ export function normalizeItem(body: unknown): MarketplaceListing {
     familyId: item.family_id == null ? null : String(item.family_id),
     familyName: item.family_name ?? null,
     sellerSku: sellerSkuOf(item.seller_custom_field, item.attributes),
+    // Not described in the pages read; confirmed in real imported items
+    // (xd_drop_off, fulfillment). fulfillment = Full: stock not editable via API.
+    logisticType: item.shipping?.logistic_type ?? null,
     externalUpdatedAt: lastUpdated && !Number.isNaN(lastUpdated.getTime()) ? lastUpdated : null,
     variations,
     raw: body,

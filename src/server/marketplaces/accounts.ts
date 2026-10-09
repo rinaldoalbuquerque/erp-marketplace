@@ -63,6 +63,7 @@ export async function completeConnection(
     nickname: profile.nickname,
     siteId: profile.siteId,
     listingModel: profile.listingModel,
+    multiWarehouse: profile.multiWarehouse,
     status: "active" as const,
     ...encryptTokens(tokens, key),
     lastTokenRefreshAt: new Date(),
@@ -150,6 +151,7 @@ export async function testConnection(
         nickname: profile.nickname,
         siteId: profile.siteId,
         listingModel: profile.listingModel,
+        multiWarehouse: profile.multiWarehouse,
         lastError: null,
       },
     });
