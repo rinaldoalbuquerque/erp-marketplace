@@ -1,4 +1,10 @@
 import type { MarketplaceConnector } from "../types";
+import {
+  getCategoryAttributes,
+  getListingForEdit,
+  updateListing,
+  updateListingDescription,
+} from "./editing";
 import type { FetchFn } from "./http";
 import { getListings, listListingIds } from "./items";
 import {
@@ -26,5 +32,13 @@ export function createMercadoLivreConnector(
     listListingIds: (accessToken, externalUserId) =>
       listListingIds(fetchFn, accessToken, externalUserId),
     getListings: (accessToken, externalIds) => getListings(fetchFn, accessToken, externalIds),
+    getCategoryAttributes: (accessToken, categoryId) =>
+      getCategoryAttributes(fetchFn, accessToken, categoryId),
+    getListingForEdit: (accessToken, externalId) =>
+      getListingForEdit(fetchFn, accessToken, externalId),
+    updateListing: (accessToken, externalId, patch) =>
+      updateListing(fetchFn, accessToken, externalId, patch),
+    updateListingDescription: (accessToken, externalId, text, exists) =>
+      updateListingDescription(fetchFn, accessToken, externalId, text, exists),
   };
 }

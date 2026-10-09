@@ -3,6 +3,8 @@
 // marketplace-specific lives in src/connectors/<marketplace>/.
 // It grows phase by phase (listings in 2A, orders in 3...).
 
+import type { AttributeDefinition, AttributeValue } from "@/domain/listings/attributes";
+
 export type MarketplaceId = "mercadolivre";
 
 /** Listing format of a seller account (see CLAUDE.md, Mercado Livre User Products). */
@@ -80,6 +82,53 @@ export interface MarketplaceConnector {
   listListingIds(accessToken: string, externalUserId: string): Promise<string[]>;
   /** Reads listings by id (the connector batches the calls). */
   getListings(accessToken: string, externalIds: string[]): Promise<ListingFetchResult[]>;
+
+  // Editing (Phase 2B)
+  /** Technical sheet of a category, in the neutral shape. */
+  getCategoryAttributes(accessToken: string, categoryId: string): Promise<AttributeDefinition[]>;
+  /** Fresh copy of one listing for editing (incl. attribute values and description). */
+  getListingForEdit(accessToken: string, externalId: string): Promise<EditableListing>;
+  /** Sends only the fields present in `patch`. Warnings = parts the marketplace ignored. */
+  updateListing(
+    accessToken: string,
+    externalId: string,
+    patch: ListingPatch,
+  ): Promise<{ warnings: string[] }>;
+  /** Replaces (or creates, when `exists` is false) the plain-text description. */
+  updateListingDescription(
+    accessToken: string,
+    externalId: string,
+    text: string,
+    exists: boolean,
+  ): Promise<void>;
+}
+
+/** A listing as needed by the edit screen. */
+export type EditableListing = {
+  listing: MarketplaceListing;
+  attributes: AttributeValue[];
+  /** Plain text; null when the listing has no description yet. */
+  description: string | null;
+  /** Editing rules the marketplace imposes on this listing. */
+  rules: { titleEditable: boolean; familyNameEditable: boolean };
+};
+
+/** Changes to send. Absent fields are not touched. */
+export type ListingPatch = {
+  title?: string;
+  /** User Products: the title is generated from it. */
+  familyName?: string;
+  priceCents?: number;
+  status?: "active" | "paused" | "closed";
+  attributes?: AttributeValue[];
+};
+
+/** The marketplace refused the request with field-level reasons (shown to the user). */
+export class MarketplaceValidationError extends Error {
+  constructor(readonly causes: string[]) {
+    super(`Marketplace refused the change: ${causes.join("; ")}`);
+    this.name = "MarketplaceValidationError";
+  }
 }
 
 /** The authorization is no longer valid: the seller must connect the account again. */

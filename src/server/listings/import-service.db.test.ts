@@ -11,6 +11,7 @@ import { db } from "@/server/db";
 import { runImportRound, startImport } from "@/server/listings/import-service";
 import { encryptTokens } from "@/server/marketplaces/token-service";
 import { tenantDb } from "@/server/tenant/tenant-db";
+import { fakeConnector as fakeConnectorBase } from "@/test/fake-connector";
 
 // Real database (`npm run test:db`) in a TEMPORARY organization deleted at the
 // end. Mercado Livre is simulated: nothing is called or changed there.
@@ -51,19 +52,7 @@ function listing(id: string, overrides: Partial<MarketplaceListing> = {}): Marke
 function fakeConnector(count: number, items: Record<string, ListingFetchResult> = {}) {
   const ids = Array.from({ length: count }, (_, index) => `MLB${1000 + index}`);
   const calls = { list: 0, get: 0 };
-  const connector: MarketplaceConnector = {
-    id: "mercadolivre",
-    label: "Mercado Livre",
-    buildAuthorizationUrl: () => "",
-    exchangeCode: async () => {
-      throw new Error("not used");
-    },
-    refreshTokens: async () => {
-      throw new Error("not used");
-    },
-    getAccountProfile: async () => {
-      throw new Error("not used");
-    },
+  const connector: MarketplaceConnector = fakeConnectorBase({
     listListingIds: async () => {
       calls.list++;
       return ids;
@@ -72,7 +61,7 @@ function fakeConnector(count: number, items: Record<string, ListingFetchResult> 
       calls.get++;
       return externalIds.map((id) => items[id] ?? { externalId: id, listing: listing(id) });
     },
-  };
+  });
   return { connector, calls, ids };
 }
 

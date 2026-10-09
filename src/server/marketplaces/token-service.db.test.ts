@@ -14,6 +14,7 @@ import {
   getAccessToken,
   ReconnectRequiredError,
 } from "@/server/marketplaces/token-service";
+import { fakeConnector as fakeConnectorBase } from "@/test/fake-connector";
 
 // Real database (`npm run test:db`), TEMPORARY organization deleted at the end.
 // The marketplace is simulated: no call reaches Mercado Livre.
@@ -28,18 +29,7 @@ function fakeConnector() {
   let validRefreshToken = "refresh-0";
   let generation = 0;
   const calls = { refresh: 0 };
-  const connector: MarketplaceConnector = {
-    id: "mercadolivre",
-    label: "Mercado Livre",
-    buildAuthorizationUrl: () => "",
-    exchangeCode: async () => {
-      throw new Error("not used");
-    },
-    getAccountProfile: async () => {
-      throw new Error("not used");
-    },
-    listListingIds: async () => [],
-    getListings: async () => [],
+  const connector: MarketplaceConnector = fakeConnectorBase({
     refreshTokens: async (refreshToken): Promise<OAuthTokens> => {
       calls.refresh++;
       await new Promise((resolve) => setTimeout(resolve, 50)); // network latency
@@ -56,7 +46,7 @@ function fakeConnector() {
         externalUserId: "1234567",
       };
     },
-  };
+  });
   return { connector, calls };
 }
 
