@@ -93,8 +93,25 @@ const bearer = (accessToken: string) => ({
 type MlErrorBody = {
   message?: string;
   error?: string;
-  cause?: Array<{ code?: string; message?: string; type?: string } | string>;
+  /** Documented as an array, but seen in practice as a single object or text too. */
+  cause?: unknown;
 };
+
+/** Readable messages from `cause`, whatever its shape (array, object, string). */
+export function causeMessages(cause: unknown): string[] {
+  const items = Array.isArray(cause) ? cause : cause == null ? [] : [cause];
+  return items
+    .map((item) => {
+      if (typeof item === "string") return item;
+      if (item && typeof item === "object") {
+        const { message, code } = item as { message?: unknown; code?: unknown };
+        if (typeof message === "string" && message) return message;
+        if (typeof code === "string" && code) return code;
+      }
+      return "";
+    })
+    .filter(Boolean);
+}
 
 /** Turns an ML error response into an error the user can read. */
 async function failure(response: Response, what: string): Promise<never> {
@@ -108,11 +125,14 @@ async function failure(response: Response, what: string): Promise<never> {
     // no body
   }
   if (response.status >= 400 && response.status < 500) {
-    const causes = (body.cause ?? [])
-      .map((cause) => (typeof cause === "string" ? cause : cause.message || cause.code))
-      .filter((cause): cause is string => Boolean(cause));
+    // Seen in practice: { cause: 374, message: "BODY_INVALID_FIELDS",
+    // error: "The field family name is invalid" } -> the readable text is in `error`.
+    const causes = causeMessages(body.cause);
+    const readable = [body.error, body.message].find((text) => text && /\s/.test(text));
     throw new MarketplaceValidationError(
-      causes.length ? causes : [body.message || body.error || `${what}: HTTP ${response.status}`],
+      causes.length
+        ? causes
+        : [readable || body.message || body.error || `${what}: HTTP ${response.status}`],
     );
   }
   throw new MarketplaceApiError(`${what} failed.`, response.status, body.error ?? null);
@@ -184,7 +204,15 @@ export async function getListingForEdit(
     rules: {
       // Title: never on User Products; on traditional items only before the first sale.
       titleEditable: !isUserProducts && (listing.soldQuantity ?? 0) === 0,
-      familyNameEditable: isUserProducts,
+      // family_name via PUT /items was refused on a real UP item (2026-10-09:
+      // 400 "The field family name is invalid"). It is changed for the whole
+      // family through PUT /user-products-families/{family_id} (not built yet).
+      familyNameEditable: false,
+      titleLockReason: isUserProducts
+        ? "user_products"
+        : (listing.soldQuantity ?? 0) > 0
+          ? "has_sales"
+          : null,
     },
   };
 }

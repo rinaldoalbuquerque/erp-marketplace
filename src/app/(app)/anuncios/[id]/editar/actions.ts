@@ -46,16 +46,27 @@ export async function saveListingEditAction(
   }
 
   const { tdb } = await getTenantContext(member);
-  const result = await saveEdit(
-    {
-      tdb,
-      organizationId: member.organizationId,
-      userId: member.user.id,
-      canClose: can(member.role, "listings.delete"),
-    },
-    listingId,
-    { ...rest, priceCents },
-  );
+  let result: SaveEditResult;
+  try {
+    result = await saveEdit(
+      {
+        tdb,
+        organizationId: member.organizationId,
+        userId: member.user.id,
+        canClose: can(member.role, "listings.delete"),
+      },
+      listingId,
+      { ...rest, priceCents },
+    );
+  } catch (error) {
+    // Never let an unexpected failure crash the page: log it (no tokens in it)
+    // and show a clear message instead.
+    console.error("Listing edit failed unexpectedly", {
+      listingId,
+      error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+    });
+    return { status: "unexpected" };
+  }
   if (result.status === "saved") {
     revalidatePath("/anuncios");
     revalidatePath(`/anuncios/${listingId}/editar`);

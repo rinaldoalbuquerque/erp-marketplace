@@ -110,7 +110,12 @@ export type EditableListing = {
   /** Plain text; null when the listing has no description yet. */
   description: string | null;
   /** Editing rules the marketplace imposes on this listing. */
-  rules: { titleEditable: boolean; familyNameEditable: boolean };
+  rules: {
+    titleEditable: boolean;
+    familyNameEditable: boolean;
+    /** Why the title is locked (shown to the user). */
+    titleLockReason: "user_products" | "has_sales" | null;
+  };
 };
 
 /** Changes to send. Absent fields are not touched. */

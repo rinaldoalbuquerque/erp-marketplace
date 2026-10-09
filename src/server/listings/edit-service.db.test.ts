@@ -80,7 +80,7 @@ function setup(state: { listing: MarketplaceListing; description: string | null 
       listing: state.listing,
       attributes: [{ id: "BRAND", valueId: null, valueName: "Termolar" }],
       description: state.description,
-      rules: { titleEditable: true, familyNameEditable: false },
+      rules: { titleEditable: true, familyNameEditable: false, titleLockReason: null },
     }),
     updateListing: async (_token, _id, patch) => {
       updates.push(patch);

@@ -6,6 +6,7 @@ import { useMemo, useState, useTransition } from "react";
 
 import { Field } from "@/components/ui/form";
 import { FormSection, SelectField, TextareaField } from "@/components/ui/fields";
+import type { EditableListing } from "@/connectors/types";
 import type { AttributeDefinition, AttributeInput } from "@/domain/listings/attributes";
 
 import { saveListingEditAction, type EditPayload } from "./actions";
@@ -141,7 +142,7 @@ export function EditListingForm({
   listingId: string;
   initial: EditFormInitial;
   definitions: AttributeDefinition[];
-  rules: { titleEditable: boolean; familyNameEditable: boolean };
+  rules: EditableListing["rules"];
   canClose: boolean;
 }) {
   const router = useRouter();
@@ -240,6 +241,14 @@ export function EditListingForm({
             lines: ["A conta precisa ser reconectada em Contas de marketplace."],
           });
           break;
+        case "unexpected":
+          setMessage({
+            tone: "error",
+            lines: [
+              "Erro inesperado ao salvar (o erro foi registrado). Recarregue a página para ver o que ficou salvo no Mercado Livre.",
+            ],
+          });
+          break;
         default:
           setMessage({ tone: "error", lines: ["O Mercado Livre não respondeu. Tente de novo."] });
       }
@@ -273,9 +282,13 @@ export function EditListingForm({
               onChange={(event) => setTitle(event.target.value)}
               error={errors.title}
               hint={
-                rules.titleEditable
-                  ? undefined
-                  : "O título não pode mudar depois da primeira venda (regra do Mercado Livre)."
+                rules.titleLockReason === "user_products"
+                  ? `User Products: o título é gerado pelo Mercado Livre a partir do nome da família${
+                      initial.familyName ? ` (“${initial.familyName}”)` : ""
+                    } e dos atributos. Para mudá-lo, altere os atributos abaixo. A edição do nome da família, que vale para todos os anúncios dela, virá numa próxima etapa.`
+                  : rules.titleLockReason === "has_sales"
+                    ? "O título não pode mudar depois da primeira venda (regra do Mercado Livre)."
+                    : undefined
               }
             />
           </div>

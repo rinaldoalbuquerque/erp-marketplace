@@ -131,7 +131,16 @@ export type SaveEditResult =
   | { status: "invalid"; fieldErrors: Record<string, string> }
   | { status: "refused"; causes: string[] }
   | { status: "conflict" }
-  | { status: "not_found" | "writes_disabled" | "forbidden" | "reconnect" | "marketplace_error" };
+  | {
+      status:
+        | "not_found"
+        | "writes_disabled"
+        | "forbidden"
+        | "reconnect"
+        | "marketplace_error"
+        /** Bug or unknown failure: logged on the server, shown as a generic message. */
+        | "unexpected";
+    };
 
 /** Builds the patch from the form, comparing with the latest marketplace version. */
 export function buildPatch(

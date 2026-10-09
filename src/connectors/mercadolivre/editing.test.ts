@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  causeMessages,
   getListingForEdit,
   normalizeCategoryAttributes,
   toItemBody,
@@ -105,7 +106,11 @@ describe("getListingForEdit", () => {
       { id: "VOLTAGE", valueId: "-1", valueName: null },
     ]);
     expect(result.description).toBe("Linha 1\nLinha 2");
-    expect(result.rules).toEqual({ titleEditable: true, familyNameEditable: false });
+    expect(result.rules).toEqual({
+      titleEditable: true,
+      familyNameEditable: false,
+      titleLockReason: null,
+    });
   });
 
   it("no description yet -> null; title locked after sales and on User Products", async () => {
@@ -115,16 +120,42 @@ describe("getListingForEdit", () => {
     });
     const traditional = await getListingForEdit(sold, "t", "MLB1");
     expect(traditional.description).toBeNull();
-    expect(traditional.rules.titleEditable).toBe(false);
+    expect(traditional.rules).toMatchObject({ titleEditable: false, titleLockReason: "has_sales" });
 
     const up = fakeFetch({
       "GET /items/MLB1": { status: 200, body: { ...item, family_name: "Garrafa térmica" } },
       "GET /items/MLB1/description": { status: 404, body: {} },
     });
+    // family_name via PUT /items is refused by Mercado Livre (seen on a real UP item).
     expect((await getListingForEdit(up, "t", "MLB1")).rules).toEqual({
       titleEditable: false,
-      familyNameEditable: true,
+      familyNameEditable: false,
+      titleLockReason: "user_products",
     });
+  });
+
+  it("reads Mercado Livre errors whatever the shape of 'cause'", async () => {
+    // Real answer seen on 2026-10-09 (cause is a number, readable text in `error`).
+    const fetchFn = fakeFetch({
+      "PUT /items/MLB1": {
+        status: 400,
+        body: {
+          cause: 374,
+          message: "BODY_INVALID_FIELDS",
+          error: "The field family name is invalid",
+          status: 400,
+        },
+      },
+    });
+    const error = await updateListing(fetchFn, "t", "MLB1", { familyName: "X" }).catch(
+      (caught: unknown) => caught,
+    );
+    expect((error as MarketplaceValidationError).causes).toEqual([
+      "The field family name is invalid",
+    ]);
+    expect(causeMessages({ code: "item.title.invalid" })).toEqual(["item.title.invalid"]);
+    expect(causeMessages("texto")).toEqual(["texto"]);
+    expect(causeMessages(null)).toEqual([]);
   });
 });
 
