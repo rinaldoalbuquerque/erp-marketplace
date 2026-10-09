@@ -175,36 +175,55 @@ async function EditListing({ params }: Pick<PageProps<"/anuncios/[id]/editar">, 
         canClose={can(member.role, "listings.delete")}
       />
 
-      {history.length ? (
-        <section className="mt-8 max-w-4xl">
-          <h2 className="mb-3 text-xl font-semibold text-ink">Histórico de alterações</h2>
-          <ul className="flex flex-col gap-2 text-sm">
-            {history.map((edit) => {
-              const changes = (Array.isArray(edit.changes) ? edit.changes : []) as Array<{
-                field: string;
-              }>;
-              const fields = changes.map((change) =>
-                change.field.startsWith("attribute:")
-                  ? change.field.slice("attribute:".length)
-                  : (FIELD_LABELS[change.field] ?? change.field),
-              );
-              return (
-                <li key={edit.id} className="rounded-lg border border-border bg-surface px-3 py-2">
-                  <span className="text-muted tabular-nums">
-                    {DATE_TIME.format(edit.createdAt)}
-                  </span>{" "}
-                  <span className={`font-medium ${EDIT_STATUS[edit.status].className}`}>
-                    {EDIT_STATUS[edit.status].label}
-                  </span>
-                  {edit.user ? <span className="text-muted"> por {edit.user.fullName}</span> : null}
-                  <span className="block text-ink">{fields.join(", ") || "—"}</span>
-                  {edit.message ? <span className="block text-muted">{edit.message}</span> : null}
-                </li>
-              );
-            })}
-          </ul>
+      {history[0] ? (
+        <section className="mt-8 max-w-4xl text-sm">
+          <h2 className="mb-3 text-xl font-semibold text-ink">Última alteração</h2>
+          <EditEntry edit={history[0]} />
+          {history.length > 1 ? (
+            // Older edits stay recorded; collapsed so the screen shows only the latest.
+            <details className="mt-2">
+              <summary className="cursor-pointer text-muted hover:text-ink">
+                Ver alterações anteriores ({history.length - 1})
+              </summary>
+              <ul className="mt-2 flex flex-col gap-2">
+                {history.slice(1).map((edit) => (
+                  <li key={edit.id}>
+                    <EditEntry edit={edit} />
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
         </section>
       ) : null}
     </>
+  );
+}
+
+type EditRow = {
+  createdAt: Date;
+  status: keyof typeof EDIT_STATUS;
+  message: string | null;
+  changes: unknown;
+  user: { fullName: string } | null;
+};
+
+function EditEntry({ edit }: { edit: EditRow }) {
+  const changes = (Array.isArray(edit.changes) ? edit.changes : []) as Array<{ field: string }>;
+  const fields = changes.map((change) =>
+    change.field.startsWith("attribute:")
+      ? change.field.slice("attribute:".length)
+      : (FIELD_LABELS[change.field] ?? change.field),
+  );
+  return (
+    <div className="rounded-lg border border-border bg-surface px-3 py-2">
+      <span className="text-muted tabular-nums">{DATE_TIME.format(edit.createdAt)}</span>{" "}
+      <span className={`font-medium ${EDIT_STATUS[edit.status].className}`}>
+        {EDIT_STATUS[edit.status].label}
+      </span>
+      {edit.user ? <span className="text-muted"> por {edit.user.fullName}</span> : null}
+      <span className="block text-ink">{fields.join(", ") || "—"}</span>
+      {edit.message ? <span className="block text-muted">{edit.message}</span> : null}
+    </div>
   );
 }
