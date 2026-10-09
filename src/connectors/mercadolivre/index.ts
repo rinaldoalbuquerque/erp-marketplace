@@ -15,6 +15,13 @@ import {
   type MercadoLivreAppConfig,
 } from "./oauth";
 import { getOrder, searchOrdersUpdated } from "./orders";
+import {
+  publishListing,
+  quoteFees,
+  suggestCategories,
+  uploadPicture,
+  validateListing,
+} from "./publishing";
 import { getShipment, getShipmentSla, getShippingLabels } from "./shipments";
 import { getAccountProfile } from "./users";
 
@@ -50,6 +57,14 @@ export function createMercadoLivreConnector(
     getShipmentSla: (accessToken, id) => getShipmentSla(fetchFn, accessToken, id),
     getShippingLabels: (accessToken, ids, format) =>
       getShippingLabels(fetchFn, accessToken, ids, format),
+    suggestCategories: (accessToken, query) => suggestCategories(fetchFn, accessToken, query),
+    uploadPicture: (accessToken, file, filename) =>
+      uploadPicture(fetchFn, accessToken, file, filename),
+    quoteFees: (accessToken, input) => quoteFees(fetchFn, accessToken, input),
+    validateListing: (accessToken, listing, model) =>
+      validateListing(fetchFn, accessToken, listing, model),
+    publishListing: (accessToken, listing, model) =>
+      publishListing(fetchFn, accessToken, listing, model),
     updateListingDescription: (accessToken, externalId, text, exists) =>
       updateListingDescription(fetchFn, accessToken, externalId, text, exists),
   };

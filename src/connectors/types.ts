@@ -3,6 +3,7 @@
 // marketplace-specific lives in src/connectors/<marketplace>/.
 // It grows phase by phase (listings in 2A, orders in 3...).
 
+import type { CanonicalListing, PublishModel } from "@/domain/listings/canonical";
 import type { AttributeDefinition, AttributeValue } from "@/domain/listings/attributes";
 
 export type MarketplaceId = "mercadolivre";
@@ -123,6 +124,26 @@ export type LabelFormat = "pdf" | "zpl";
 /** Label file as returned by the marketplace. */
 export type LabelFile = { contentType: string; data: ArrayBuffer };
 
+/** Category suggested from a product name. */
+export type CategorySuggestion = {
+  categoryId: string;
+  categoryName: string;
+  domainName: string | null;
+  /** Attribute values the marketplace inferred from the text (e.g. brand). */
+  attributes: AttributeValue[];
+};
+
+/** Marketplace fee to sell at a price, per listing type. */
+export type FeeQuote = {
+  listingTypeId: string;
+  listingTypeName: string | null;
+  saleFeeCents: number;
+  percentageFee: number | null;
+  fixedFeeCents: number | null;
+};
+
+export type UploadedPicture = { id: string; url: string | null };
+
 export interface MarketplaceConnector {
   readonly id: MarketplaceId;
   /** Human name for the UI. */
@@ -153,6 +174,26 @@ export interface MarketplaceConnector {
     to: Date,
   ): Promise<MarketplaceOrder[]>;
   getShipment(accessToken: string, externalShipmentId: string): Promise<MarketplaceShipment>;
+
+  // Creating listings (Phase 2C)
+  suggestCategories(accessToken: string, query: string): Promise<CategorySuggestion[]>;
+  uploadPicture(accessToken: string, file: Blob, filename: string): Promise<UploadedPicture>;
+  quoteFees(
+    accessToken: string,
+    input: { categoryId: string; priceCents: number; listingTypeIds: string[] },
+  ): Promise<FeeQuote[]>;
+  /** Asks the marketplace to check a listing without publishing (throws MarketplaceValidationError). */
+  validateListing(
+    accessToken: string,
+    listing: CanonicalListing,
+    model: PublishModel,
+  ): Promise<void>;
+  /** Publishes a new listing (the description is sent afterwards with updateListingDescription). */
+  publishListing(
+    accessToken: string,
+    listing: CanonicalListing,
+    model: PublishModel,
+  ): Promise<MarketplaceListing>;
   /** Null when the marketplace has no deadline for it (cancelled, Full...). */
   getShipmentSla(accessToken: string, externalShipmentId: string): Promise<ShipmentSla | null>;
   /** Labels of up to LABELS_PER_CALL shipments in one file. */

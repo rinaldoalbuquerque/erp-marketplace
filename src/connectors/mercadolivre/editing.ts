@@ -86,7 +86,7 @@ export function normalizeCategoryAttributes(body: unknown): AttributeDefinition[
   });
 }
 
-const bearer = (accessToken: string) => ({
+export const bearer = (accessToken: string) => ({
   accept: "application/json",
   authorization: `Bearer ${accessToken}`,
 });
@@ -115,7 +115,7 @@ export function causeMessages(cause: unknown): string[] {
 }
 
 /** Turns an ML error response into an error the user can read. */
-async function failure(response: Response, what: string): Promise<never> {
+export async function failure(response: Response, what: string): Promise<never> {
   if (response.status === 401) {
     throw new MarketplaceAuthError("Mercado Livre rejected the access token.", "unauthorized");
   }
