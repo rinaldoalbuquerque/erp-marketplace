@@ -10,7 +10,8 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Every path except Next.js internals and static files.
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    // Every path except Next.js internals, static files and machine endpoints
+    // (marketplace notifications must answer fast and carry no login).
+    "/((?!api/notificacoes|api/cron|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

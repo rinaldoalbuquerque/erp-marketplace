@@ -25,6 +25,8 @@ export const serverEnvSchema = z.object({
   ML_CLIENT_SECRET: optional(z.string()),
   /** Must match exactly the redirect URI registered in the Mercado Livre application. */
   ML_REDIRECT_URI: optional(z.url()),
+  /** Vercel Cron sends it as "Authorization: Bearer ..."; the daily order catch-up checks it. */
+  CRON_SECRET: optional(z.string().min(16)),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
