@@ -70,6 +70,36 @@ export type MarketplaceListing = {
 export type ListingFetchResult =
   { externalId: string; listing: MarketplaceListing } | { externalId: string; error: string };
 
+/** One sold line of an order (neutral shape). */
+export type MarketplaceOrderItem = {
+  externalItemId: string;
+  /** Variation id, or "" when the listing has no variations. */
+  variationKey: string;
+  title: string;
+  quantity: number;
+  unitPriceCents: number | null;
+  saleFeeCents: number | null;
+  sellerSku: string | null;
+};
+
+/** A sale in a marketplace-neutral shape (what the ERP stores in `orders`). */
+export type MarketplaceOrder = {
+  externalId: string;
+  packId: string | null;
+  status: string;
+  tags: string[];
+  totalCents: number | null;
+  currency: string | null;
+  buyerNickname: string | null;
+  shippingId: string | null;
+  dateCreated: Date;
+  /** Sale confirmed (the marketplace discounted its stock); null while not confirmed. */
+  dateClosed: Date | null;
+  externalUpdatedAt: Date | null;
+  items: MarketplaceOrderItem[];
+  raw: unknown;
+};
+
 export interface MarketplaceConnector {
   readonly id: MarketplaceId;
   /** Human name for the UI. */
@@ -88,6 +118,17 @@ export interface MarketplaceConnector {
   getListings(accessToken: string, externalIds: string[]): Promise<ListingFetchResult[]>;
   /** Sets the available quantity of a listing (not for Full / multi-origin). */
   setListingStock(accessToken: string, externalId: string, quantity: number): Promise<void>;
+
+  // Orders (Phase 3)
+  /** One order, fresh from the marketplace. */
+  getOrder(accessToken: string, externalOrderId: string): Promise<MarketplaceOrder>;
+  /** Orders of the seller changed in [from, to] (catch-up when notifications are missed). */
+  searchOrdersUpdated(
+    accessToken: string,
+    externalUserId: string,
+    from: Date,
+    to: Date,
+  ): Promise<MarketplaceOrder[]>;
 
   // Editing (Phase 2B)
   /** Technical sheet of a category, in the neutral shape. */

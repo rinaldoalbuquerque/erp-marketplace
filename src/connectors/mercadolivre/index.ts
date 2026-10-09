@@ -14,6 +14,7 @@ import {
   refreshTokens,
   type MercadoLivreAppConfig,
 } from "./oauth";
+import { getOrder, searchOrdersUpdated } from "./orders";
 import { getAccountProfile } from "./users";
 
 export type { MercadoLivreAppConfig } from "./oauth";
@@ -41,6 +42,9 @@ export function createMercadoLivreConnector(
       updateListing(fetchFn, accessToken, externalId, patch),
     setListingStock: (accessToken, externalId, quantity) =>
       setListingStock(fetchFn, accessToken, externalId, quantity),
+    getOrder: (accessToken, externalOrderId) => getOrder(fetchFn, accessToken, externalOrderId),
+    searchOrdersUpdated: (accessToken, externalUserId, from, to) =>
+      searchOrdersUpdated(fetchFn, accessToken, externalUserId, from, to),
     updateListingDescription: (accessToken, externalId, text, exists) =>
       updateListingDescription(fetchFn, accessToken, externalId, text, exists),
   };

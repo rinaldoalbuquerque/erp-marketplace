@@ -27,7 +27,11 @@ export const SEARCH_PAGE_SIZE = 100;
 export const BULK_SIZE = 20;
 const MAX_SCAN_PAGES = 2000; // safety stop (200k items)
 
-async function getJson(fetchFn: FetchFn, url: string, accessToken: string): Promise<unknown> {
+export async function getJson(
+  fetchFn: FetchFn,
+  url: string,
+  accessToken: string,
+): Promise<unknown> {
   const response = await mlFetch(fetchFn, url, {
     headers: { accept: "application/json", authorization: `Bearer ${accessToken}` },
   });
@@ -121,7 +125,7 @@ const itemSchema = z
   })
   .passthrough();
 
-const toCents = (price: number | null | undefined) =>
+export const toCents = (price: number | null | undefined) =>
   typeof price === "number" ? Math.round(price * 100) : null;
 
 /** SKU from seller_custom_field or the SELLER_SKU attribute (both documented as SKU sources). */

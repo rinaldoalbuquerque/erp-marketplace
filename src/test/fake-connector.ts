@@ -19,6 +19,8 @@ export function fakeConnector(overrides: Partial<MarketplaceConnector> = {}): Ma
     listListingIds: notUsed("listListingIds"),
     getListings: notUsed("getListings"),
     setListingStock: notUsed("setListingStock"),
+    getOrder: notUsed("getOrder"),
+    searchOrdersUpdated: notUsed("searchOrdersUpdated"),
     getCategoryAttributes: notUsed("getCategoryAttributes"),
     getListingForEdit: notUsed("getListingForEdit"),
     updateListing: notUsed("updateListing"),
