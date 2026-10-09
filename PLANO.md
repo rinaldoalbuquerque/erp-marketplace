@@ -132,7 +132,13 @@ ERP para gerenciar marketplaces, começando pelo Mercado Livre, com foco em **pr
   - Anúncios sem SKU no ML (75 + 20 com variações sem SKU) não viram produto: listados na revisão.
 - [x] Preencher dados fiscais em massa (NCM, origem, CFOP para vários SKUs de uma vez): os produtos criados dos anúncios nascem sem fiscal
   - Produtos > "Dados fiscais em massa" (`/produtos/fiscal`): só os campos preenchidos são aplicados; seleção por SKU, produto, página ou "todos do filtro" (refeito no servidor). Testado em 08/10/2026.
-- [ ] **2B** Renderizador de formulário por categoria + edição de anúncios (valida o motor do formulário)
+- [x] **2B** Renderizador de formulário por categoria + edição de anúncios (valida o motor do formulário)
+  - Formulário montado da ficha técnica da categoria (cache de 24 h): lista, sim/não, número+unidade, texto com sugestões, "não se aplica", atributos ocultos em "Avançado", somente-leitura exibidos.
+  - Edita título (tradicional sem vendas), preço, status (finalizar exige permissão de apagar), descrição (texto simples) e atributos; envia só o que mudou; confere o que o ML aplicou; avisa conflito; histórico em `listing_edits`.
+  - Chave por conta "Permitir alterações pelo ERP" (desligada por padrão). Testado em 09/10/2026 na conta de teste (TESTUSER…): preço, descrição, atributos e status OK.
+  - Usuários de teste do ML criados (vendedor e comprador); vendedor conectado ao ERP.
+  - Aprendido na prática: `family_name` via `PUT /items` é recusado em User Products (usar o endpoint de famílias); o ML manda avisos gerais (ex.: ME1, frete grátis) em toda alteração; o campo `cause` dos erros nem sempre é lista.
+  - Ainda não: editar nome da família (endpoint de famílias), fotos, variações, edição em massa.
 - [ ] **2C** Criar anúncio: sugestão de categoria, simulador de preço, validação, publicação, rascunhos
 - [ ] **2D** Replicação, cópia de fora e migração entre contas (reaproveita formulário e rascunhos), com fila em segundo plano
 - [ ] **2E** IA: ficha técnica e descrição

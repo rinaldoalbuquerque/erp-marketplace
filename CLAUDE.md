@@ -93,6 +93,8 @@ Notas técnicas:
 - **Chamadas ao marketplace sempre com `getAccessToken()`** (`src/server/marketplaces/token-service.ts`): renova sozinho, com trava por conta (refresh token do ML é de uso único). Nunca ler/decifrar token por conta própria. Conectores recebem config injetada (`src/server/marketplaces/config.ts`) e são testados com `fetch` simulado.
 - ML: ler anúncios em lote só com `/items/bulk?ids=` (máx. 20); `/items?ids=` está sendo desligado (25/10/2026). Listar anúncios do vendedor com `search_type=scan`.
 - Anúncios importados ficam em `listings` (com `raw` = resposta completa do ML); vínculo com SKU em `sku_listing_mappings` (um SKU por anúncio/variação).
+- **Escrever no marketplace só via `saveEdit()`** (`src/server/listings/edit-service.ts`): exige `allowWrites` na conta (desligado por padrão), confere versão (conflito), envia só o que mudou, lê de volta e registra em `listing_edits`. Testar mudanças primeiro na conta de teste do ML.
+- Comportamento real do ML (confirmado na conta de teste): `cause` de erro pode vir como número/objeto/lista (texto útil em `error`); `warnings` do `PUT /items` são avisos gerais (não "campo ignorado"); `family_name` via `PUT /items` é recusado em UP; atributos `number_unit` são normalizados pelo ML (ex.: 1040 mL → 1.04 L).
 - A conexão com o ML (OAuth) só funciona pelo endereço da Vercel (redirect HTTPS cadastrado na aplicação). Local e Vercel compartilham banco e `TOKEN_ENCRYPTION_KEY`.
 - Testes: `npm run check` encadeado com `set -o pipefail` (ou checando o código de saída) antes de commitar, para não commitar com teste falhando.
 - Tabelas filhas de negócio usam chave estrangeira composta `(organizationId, xId)` → `(organizationId, id)` do pai, para o banco impedir vínculo entre empresas.
