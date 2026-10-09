@@ -146,7 +146,13 @@ ERP para gerenciar marketplaces, começando pelo Mercado Livre, com foco em **pr
   - Chave por conta "Estoque do ERP no Mercado Livre" (exige alterações liberadas; bloquear alterações desliga). Ligar passa por uma prévia (ML hoje × vai ficar, destaca os que vão zerar e pausar). Contas mostra enviados/fila/ignorados/erros com "Enviar todos agora" e "Reenviar os com erro"; Estoque > SKU mostra a situação por anúncio.
   - Testado em 09/10/2026 na conta de teste: ligar, envio inicial e ajuste refletidos no ML.
   - Ainda não: multi origem, variações tradicionais, ligar na BELA.UTILIDADES (decisão do dono).
-- [ ] **2C** Criar anúncio: sugestão de categoria, simulador de preço, validação, publicação, rascunhos
+- [x] **2C** Criar anúncio: sugestão de categoria, simulador de preço, validação, publicação, rascunhos
+  - Modelo canônico do anúncio (`src/domain/listings/canonical.ts`) e rascunhos (`listing_drafts`), base da 2D.
+  - Anúncios → Novo anúncio: começa por um SKU (nome, marca, EAN, estoque) ou em branco; categoria sugerida pelo ML (`domain_discovery`), ficha técnica da categoria (mesmo componente da edição), fotos enviadas direto ao ML (reduzidas no navegador), descrição, garantia, Clássico/Premium.
+  - Simulador: tarifa do ML (`listing_prices`) nos dois tipos, quanto recebe e margem sobre o custo do SKU (sem frete/impostos).
+  - Validar no ML (`/items/validate`) e Publicar (`POST /items`; User Products com `family_name` e sem título). Publica uma vez só (trava + sem nova tentativa automática); depois envia a descrição, importa, vincula ao SKU e enfileira o estoque.
+  - Testado em 09/10/2026 na conta de teste: anúncio MLB7778987736 (User Products, 3 fotos, 31 atributos) publicado e importado.
+  - Ainda não: várias variações de uma vez (nova variação na família), frete por anúncio, copiar anúncio existente (2D).
 - [ ] **2D** Replicação, cópia de fora e migração entre contas (reaproveita formulário e rascunhos), com fila em segundo plano
 - [ ] **2E** IA: ficha técnica e descrição
 - [ ] Edição em massa (pode entrar junto da 2B/2D)
@@ -159,7 +165,7 @@ ERP para gerenciar marketplaces, começando pelo Mercado Livre, com foco em **pr
 - [x] Baixa automática de estoque (idempotente)
   - Chave por conta "Vendas baixam o estoque do ERP" (desligada por padrão); só vendas confirmadas (`date_closed`) depois de ligar. Full não baixa; cancelado devolve; devolução parcial/reclamação não devolve sozinho (entrada manual). Anúncio sem SKU fica marcado "Sem SKU vinculado".
   - Chave de idempotência por linha do pedido (`order:{conta}:{pedido}:{item}:{variação}:sale|return`); depois da baixa, o novo saldo vai para os outros anúncios (fila de estoque).
-  - Ligada na BELA em 09/10/2026 (estoque só no ERP: alterações e sincronização da BELA continuam desligadas). Falta ver a primeira venda real de anúncio vinculado baixar o saldo.
+  - Ligada na BELA em 09/10/2026 (estoque só no ERP: alterações e sincronização da BELA continuam desligadas). Confirmado em 09/10/2026: venda real de anúncio vinculado baixou o saldo no ERP.
 - [x] Lista, busca, abas por etapa do envio
   - Envio de cada pedido (`/shipments/{id}` com `x-format-new`, prazo em `/shipments/{id}/sla`) copiado no pedido; etapa calculada: Para imprimir, Aguardando NF, Impressos, Em preparo, Enviados, Entregues, Full, Cancelados, Outros. Prazo de despacho em destaque; filtro por conta; busca por pedido, comprador, anúncio e rastreio.
   - Etiquetas em lote (PDF ou Zebra, até 50, uma conta por vez; carrinho = uma etiqueta), com aviso de NF antes de imprimir. Testado em 09/10/2026 com pedido real da BELA: etiqueta baixou normalmente.
