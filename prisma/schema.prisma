@@ -35,6 +35,7 @@ model Organization {
   skuListingMappings  SkuListingMapping[]
   syncJobs            SyncJob[]
   listingEdits        ListingEdit[]
+  stockPushes         StockPush[]
 
   @@map("organizations")
 }
@@ -220,17 +221,21 @@ enum MarketplaceAccountStatus {
 /// A seller account connected to the ERP. Unlimited per organization, each one
 /// with its own credentials and sync state (CLAUDE.md).
 model MarketplaceAccount {
-  id             String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  organizationId String                   @map("organization_id") @db.Uuid
-  marketplace    Marketplace
+  id               String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId   String                   @map("organization_id") @db.Uuid
+  marketplace      Marketplace
   /// Seller id in the marketplace (Mercado Livre user_id), stored as text.
-  externalUserId String                   @map("external_user_id")
-  nickname       String
-  siteId         String?                  @map("site_id")
-  listingModel   ListingModel             @default(unknown) @map("listing_model")
-  status         MarketplaceAccountStatus @default(active)
+  externalUserId   String                   @map("external_user_id")
+  nickname         String
+  siteId           String?                  @map("site_id")
+  listingModel     ListingModel             @default(unknown) @map("listing_model")
+  status           MarketplaceAccountStatus @default(active)
   /// The ERP may change listings of this account (off by default; the owner turns it on).
-  allowWrites    Boolean                  @default(false) @map("allow_writes")
+  allowWrites      Boolean                  @default(false) @map("allow_writes")
+  /// Send ERP stock to the linked listings (off by default; enabled after a preview).
+  stockSyncEnabled Boolean                  @default(false) @map("stock_sync_enabled")
+  /// Seller uses multi-origin stock (ML tag warehouse_management): other stock endpoint.
+  multiWarehouse   Boolean                  @default(false) @map("multi_warehouse")
 
   /// AES-256-GCM encrypted (src/server/crypto). Never logged or shown.
   accessTokenEncrypted  String?   @map("access_token_encrypted")
@@ -289,6 +294,8 @@ model Listing {
   familyName           String?      @map("family_name")
   /// Seller SKU in the marketplace (ML: seller_custom_field or SELLER_SKU attribute)
   sellerSku            String?      @map("seller_sku")
+  /// Shipping logistic (ML shipping.logistic_type), e.g. fulfillment = Full
+  logisticType         String?      @map("logistic_type")
   externalUpdatedAt    DateTime?    @map("external_updated_at") @db.Timestamptz(6)
   /// Full marketplace payload, base for the canonical model and editing (2B).
   raw                  Json
@@ -301,6 +308,7 @@ model Listing {
   variations   ListingVariation[]
   mappings     SkuListingMapping[]
   edits        ListingEdit[]
+  stockPushes  StockPush[]
 
   @@unique([marketplaceAccountId, externalId])
   @@unique([organizationId, id])
@@ -453,4 +461,46 @@ model ListingEdit {
 
   @@index([organizationId, listingId, createdAt])
   @@map("listing_edits")
+}
+
+enum StockPushStatus {
+  pending
+  sent
+  /// Not sent on purpose (Full, unsupported...): see skipReason
+  skipped
+  /// Gave up after retries or refused by the marketplace: see lastError
+  failed
+
+  @@map("stock_push_status")
+}
+
+/// Outbox of stock updates to marketplace listings: at most one row per
+/// listing/variation, always holding the latest desired quantity.
+model StockPush {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId  String          @map("organization_id") @db.Uuid
+  listingId       String          @map("listing_id") @db.Uuid
+  /// Variation id, or "" for the whole listing (same idea as sku_listing_mappings)
+  variationKey    String          @default("") @map("variation_key")
+  desiredQuantity Int             @map("desired_quantity")
+  status          StockPushStatus @default(pending)
+  attempts        Int             @default(0)
+  nextAttemptAt   DateTime        @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  /// Set by the round processing the row; a new enqueue clears it so a stale
+  /// result never overwrites a newer quantity.
+  claimToken      String?         @map("claim_token") @db.Uuid
+  claimedUntil    DateTime?       @map("claimed_until") @db.Timestamptz(6)
+  lastError       String?         @map("last_error")
+  skipReason      String?         @map("skip_reason")
+  sentQuantity    Int?            @map("sent_quantity")
+  sentAt          DateTime?       @map("sent_at") @db.Timestamptz(6)
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  listing      Listing      @relation(fields: [organizationId, listingId], references: [organizationId, id], onDelete: Cascade)
+
+  @@unique([listingId, variationKey])
+  @@index([organizationId, status, nextAttemptAt])
+  @@map("stock_pushes")
 }
