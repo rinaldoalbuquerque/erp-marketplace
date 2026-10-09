@@ -117,8 +117,11 @@ async function claim(organizationId: string, jobId: string, now: Date): Promise<
 
 type ReportError = { id: string; message: string };
 
-/** Saves one listing and its variations (idempotent). Returns whether it was new. */
-async function saveListing(
+/**
+ * Saves one listing and its variations (idempotent). Returns whether it was new.
+ * Also used after an edit to refresh the local copy (edit-service.ts).
+ */
+export async function saveListing(
   tdb: TenantDb,
   organizationId: string,
   accountId: string,
