@@ -8,6 +8,7 @@ import { db } from "@/server/db";
 import {
   checkInvoiceReadiness,
   issueInvoices,
+  refreshPendingInvoices,
   syncInvoicesForShipment,
 } from "@/server/fiscal/invoice-service";
 import { encryptTokens } from "@/server/marketplaces/token-service";
@@ -252,5 +253,38 @@ describe("invoices against the database", () => {
         problems: ["MLB-NOFISCAL: NCM ausente"],
       },
     ]);
+  });
+
+  it("an invoice pending authorization is read again until it gets its number", async () => {
+    const order = await createOrder();
+    const externalId = `INV-PENDING-${Date.now()}`;
+    let answer = doc({ externalId, status: "pending_authorization", number: null, series: null });
+    const provider = fakeFiscalProvider({
+      issueForOrders: async () => answer,
+      findInvoiceForOrder: async (_ctx, id) =>
+        id === order.externalId && answer.status !== "pending_authorization" ? answer : null,
+    });
+    await issueInvoices(organizationId, null, [order.id], deps(provider));
+    expect(await db.invoice.findFirstOrThrow({ where: { externalId } })).toMatchObject({
+      status: "pending_authorization",
+      number: null,
+    });
+
+    answer = doc({
+      externalId,
+      status: "authorized",
+      number: 31337,
+      danfePath: "/users/x/invoices/d",
+    });
+    const account = {
+      id: accountId,
+      organizationId,
+      marketplace: "mercadolivre" as const,
+      externalUserId,
+    };
+    expect(await refreshPendingInvoices(account, "token", deps(provider))).toBe(1);
+    const saved = await db.invoice.findFirstOrThrow({ where: { externalId } });
+    expect(saved).toMatchObject({ status: "authorized", number: 31337 });
+    expect(await db.invoice.count({ where: { packKey: order.externalId } })).toBe(1);
   });
 });

@@ -51,6 +51,17 @@ describe("Mercado Livre invoicer", () => {
     });
   });
 
+  it("pending authorization: number 0 / series 0 mean not numbered yet", () => {
+    expect(
+      normalizeInvoice({
+        ...authorized,
+        status: "pending_authorization",
+        invoice_number: 0,
+        invoice_series: "0",
+      }),
+    ).toMatchObject({ status: "pending_authorization", number: null, series: null });
+  });
+
   it("finds the invoice of an order; 404 means none", async () => {
     const found = fakeFetch(() => ({ status: 200, body: authorized }));
     const invoicer = createMercadoLivreInvoicer(found);

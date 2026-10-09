@@ -168,6 +168,51 @@ export async function syncInvoiceForOrder(
   return true;
 }
 
+/** Invoice statuses that won't change by themselves (anything else is re-read). */
+const FINAL_STATUSES = ["authorized", "error", "requesting", "cancelled"] as const;
+
+/**
+ * Re-reads invoices still being processed at the provider (e.g.
+ * pending_authorization right after issuing) until they get number, key and files.
+ */
+export async function refreshPendingInvoices(
+  account: InvoiceAccount,
+  accessToken: string,
+  deps: FiscalDeps = {},
+): Promise<number> {
+  const pending = await db.invoice.findMany({
+    where: {
+      organizationId: account.organizationId,
+      marketplaceAccountId: account.id,
+      status: { notIn: [...FINAL_STATUSES] },
+    },
+    take: 30,
+    select: {
+      packKey: true,
+      orders: { select: { id: true, externalId: true }, orderBy: { externalId: "asc" } },
+    },
+  });
+  const provider = (deps.providerFor ?? getFiscalProvider)(account.marketplace);
+  const ctx: FiscalContext = { accessToken, sellerId: account.externalUserId };
+  let updated = 0;
+  for (const invoice of pending) {
+    const first = invoice.orders[0];
+    if (!first) continue;
+    const doc = await provider.findInvoiceForOrder(ctx, first.externalId);
+    if (!doc) continue;
+    await saveInvoice(
+      account,
+      invoice.packKey,
+      invoice.orders.map((order) => order.id),
+      doc,
+      null,
+      null,
+    );
+    updated++;
+  }
+  return updated;
+}
+
 /** Stages after the invoice step: their invoice exists at the provider. */
 const INVOICED_STAGES = ["ready_to_print", "printed", "shipped", "delivered"] as const;
 /** Don't look up the same order again before this. */
@@ -188,11 +233,18 @@ export async function syncInvoicesForShipment(
       organizationId: account.organizationId,
       marketplaceAccountId: account.id,
       shippingId,
-      invoiceId: null,
-      stage: { in: [...INVOICED_STAGES] },
       OR: [
-        { invoiceCheckedAt: null },
-        { invoiceCheckedAt: { lt: new Date(Date.now() - INVOICE_RECHECK_MS) } },
+        // no invoice in the ERP yet, but the shipment is past the invoice step
+        {
+          invoiceId: null,
+          stage: { in: [...INVOICED_STAGES] },
+          OR: [
+            { invoiceCheckedAt: null },
+            { invoiceCheckedAt: { lt: new Date(Date.now() - INVOICE_RECHECK_MS) } },
+          ],
+        },
+        // invoice still being processed at the provider (e.g. pending_authorization)
+        { invoice: { status: { notIn: [...FINAL_STATUSES] } } },
       ],
     },
     select: { id: true, externalId: true, packId: true },

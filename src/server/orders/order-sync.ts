@@ -16,7 +16,11 @@ import { getAccessToken, ReconnectRequiredError } from "@/server/marketplaces/to
 import { enqueueForSkus } from "@/server/stock-sync/push-service";
 import { tenantDb } from "@/server/tenant/tenant-db";
 
-import { syncInvoicesForShipment, type FiscalDeps } from "@/server/fiscal/invoice-service";
+import {
+  refreshPendingInvoices,
+  syncInvoicesForShipment,
+  type FiscalDeps,
+} from "@/server/fiscal/invoice-service";
 
 import { saveOrder, type OrderAccount } from "./order-service";
 import { refreshShipment, shipmentsToRefresh } from "./shipment-service";
@@ -332,6 +336,12 @@ export async function catchUpOrders(
           throw error;
         }
       }
+    }
+    // Invoices still being processed at the provider (number/files come later).
+    try {
+      await refreshPendingInvoices(account, token, deps);
+    } catch (error) {
+      if (!(error instanceof MarketplaceApiError)) throw error;
     }
     await db.marketplaceAccount.updateMany({
       where: { id: accountId, organizationId },

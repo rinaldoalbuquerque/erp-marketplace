@@ -88,8 +88,12 @@ export function normalizeInvoice(body: unknown): InvoiceDocument {
   return {
     externalId: invoice.id,
     status: invoice.status ?? "unknown",
-    number: Number.isFinite(number) ? number : null,
-    series: invoice.invoice_series == null ? null : String(invoice.invoice_series),
+    // While pending_authorization ML answers number 0 / series "0" (seen 2026-10-09).
+    number: number !== null && Number.isFinite(number) && number > 0 ? number : null,
+    series:
+      invoice.invoice_series == null || String(invoice.invoice_series) === "0"
+        ? null
+        : String(invoice.invoice_series),
     accessKey: invoice.attributes?.invoice_key ?? null,
     amountCents: toCents(invoice.amount),
     issuedAt: mlDate(invoice.attributes?.authorization_date ?? invoice.issued_date),
