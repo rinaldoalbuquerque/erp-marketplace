@@ -14,7 +14,7 @@ describe("newPrice", () => {
   it("sets, adjusts by % or by R$, rounds to ,90 and never goes below R$ 1,00", () => {
     expect(newPrice({ kind: "price_set", cents: 4990, roundTo90: false }, 2990)).toBe(4990);
     expect(newPrice({ kind: "price_percent", percent: 8, roundTo90: false }, 2990)).toBe(3229);
-    expect(newPrice({ kind: "price_percent", percent: 8, roundTo90: true }, 2990)).toBe(3290);
+    expect(newPrice({ kind: "price_percent", percent: 8, roundTo90: true }, 2990)).toBe(3190); // 32,29 is nearer 31,90
     expect(newPrice({ kind: "price_amount", cents: -200, roundTo90: false }, 2990)).toBe(2790);
     expect(newPrice({ kind: "price_amount", cents: -5000, roundTo90: false }, 2990)).toBe(100);
   });
