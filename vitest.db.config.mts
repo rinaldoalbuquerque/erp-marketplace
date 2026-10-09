@@ -16,5 +16,7 @@ export default defineConfig({
     include: ["src/**/*.db.test.ts"],
     setupFiles: ["dotenv/config"],
     environment: "node",
+    // Remote database (Supabase): a test does many round trips; 5s default is too tight.
+    testTimeout: 20_000,
   },
 });
