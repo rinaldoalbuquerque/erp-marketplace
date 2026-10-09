@@ -38,6 +38,8 @@ export const canonicalListingSchema = z.object({
   title: z.string().trim().max(200),
   description: z.string().max(50_000),
   categoryId: z.string().trim().max(50).nullable(),
+  /** Display name of the category (shown on the form; not sent). */
+  categoryName: z.string().max(300).nullable().default(null),
   condition: z.enum(["new", "used"]),
   listingTypeId: z.enum(["gold_special", "gold_pro"]),
   priceCents: z.number().int().positive().max(1_000_000_000).nullable(),
@@ -60,6 +62,7 @@ export function emptyListing(): CanonicalListing {
     title: "",
     description: "",
     categoryId: null,
+    categoryName: null,
     condition: "new",
     listingTypeId: DEFAULT_LISTING_TYPE,
     priceCents: null,

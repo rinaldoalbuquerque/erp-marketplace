@@ -1,4 +1,4 @@
-import { ExternalLink, Pencil, Search } from "lucide-react";
+import { ExternalLink, Pencil, Plus, Search } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -117,9 +117,22 @@ async function Listings({ searchParams }: Pick<PageProps<"/anuncios">, "searchPa
         title="Anúncios"
         description={`${result.total} ${result.total === 1 ? "anúncio" : "anúncios"} encontrados.`}
         actions={
-          <ButtonLink href="/contas" variant="secondary">
-            Importar / atualizar
-          </ButtonLink>
+          <div className="flex flex-wrap gap-2">
+            <ButtonLink href="/contas" variant="secondary">
+              Importar / atualizar
+            </ButtonLink>
+            {can(member.role, "listings.edit") ? (
+              <>
+                <ButtonLink href="/anuncios/rascunhos" variant="secondary">
+                  Rascunhos
+                </ButtonLink>
+                <ButtonLink href="/anuncios/novo">
+                  <Plus className="size-4" aria-hidden="true" />
+                  Novo anúncio
+                </ButtonLink>
+              </>
+            ) : null}
+          </div>
         }
       />
 
