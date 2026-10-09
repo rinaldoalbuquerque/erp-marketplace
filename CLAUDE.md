@@ -60,7 +60,6 @@ ERP para gerenciar anúncios, estoque e pedidos em marketplaces.
 
 ## Pontos a confirmar (não assumir como verdade)
 
-- Que permissões e cadastro fiscal o Faturador do ML exige para emitir NF por API na conta real.
 - Endpoints `/categories/{id}/attributes` e `/items/validate`: confirmar formato atual na documentação.
 - Descrição de anúncio do ML aceita só texto simples? Confirmar.
 - Como o User Product se comporta nas contas reais do Brasil (como a criação responde em cada tipo). Já confirmado: `/users/me` traz `tags` com `user_product_seller` (conta BELA.UTILIDADES).
@@ -97,6 +96,7 @@ Notas técnicas:
 - **Estoque para o marketplace só pela fila** (`src/server/stock-sync/`): depois de mudar estoque ou vínculo, chamar `queueStockSync(org, () => enqueueForSkus/enqueueForListings(...))`. Só contas com `allowWrites` **e** `stockSyncEnabled` participam; regras (Full, variação, multi origem, negativo → 0) em `src/domain/stock/push-rules.ts`. O envio relê o saldo atual do SKU e só marca "enviado" se ninguém reenfileirou no meio (`claimToken`).
 - **Pedidos** (`src/server/orders/`): todo pedido entra por `saveOrder()` (idempotente; baixa/devolução de estoque por `adjustStock` com chave fixa por linha). Regras de baixa em `src/domain/orders/stock-rules.ts`, etapa do envio em `src/domain/orders/stage.ts`. Avisos do ML: `/api/notificacoes/mercadolivre` só grava e responde (limite de 500 ms); processamento em `after()`. Rotas de máquina (`/api/notificacoes`, `/api/cron`) ficam fora do `proxy.ts`.
 - ML: `/shipments` exige o cabeçalho `x-format-new: true` e não traz mais `order_id` (o pedido aponta para o envio pelo `shipping.id`). Etiqueta só em `ready_to_ship` + `ready_to_print` (ou `printed` para reimprimir), máx. 50 por chamada, nunca Full.
+- **Nota fiscal só pela camada fiscal** (`src/fiscal/types.ts` → `src/server/fiscal/invoice-service.ts`): `issueInvoices()` consulta antes se o pedido já tem nota, emite um carrinho por vez sob trava e nunca repete a chamada de emissão sozinha (NF-e não se desfaz). Testes usam `fakeFiscalProvider()` (`src/test/fake-fiscal.ts`); nenhum teste pode chamar o Faturador de verdade. O ML não aceita nota de homologação: todo teste real emite NF de verdade.
 - Comportamento real do ML (confirmado na conta de teste): `cause` de erro pode vir como número/objeto/lista (texto útil em `error`); `warnings` do `PUT /items` são avisos gerais (não "campo ignorado"); `family_name` via `PUT /items` é recusado em UP; atributos `number_unit` são normalizados pelo ML (ex.: 1040 mL → 1.04 L).
 - A conexão com o ML (OAuth) só funciona pelo endereço da Vercel (redirect HTTPS cadastrado na aplicação). Local e Vercel compartilham banco e `TOKEN_ENCRYPTION_KEY`.
 - Testes: `npm run check` encadeado com `set -o pipefail` (ou checando o código de saída) antes de commitar, para não commitar com teste falhando.

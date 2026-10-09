@@ -162,14 +162,21 @@ ERP para gerenciar marketplaces, começando pelo Mercado Livre, com foco em **pr
   - Ligada na BELA em 09/10/2026 (estoque só no ERP: alterações e sincronização da BELA continuam desligadas). Falta ver a primeira venda real de anúncio vinculado baixar o saldo.
 - [x] Lista, busca, abas por etapa do envio
   - Envio de cada pedido (`/shipments/{id}` com `x-format-new`, prazo em `/shipments/{id}/sla`) copiado no pedido; etapa calculada: Para imprimir, Aguardando NF, Impressos, Em preparo, Enviados, Entregues, Full, Cancelados, Outros. Prazo de despacho em destaque; filtro por conta; busca por pedido, comprador, anúncio e rastreio.
-  - Etiquetas em lote (PDF ou Zebra, até 50, uma conta por vez; carrinho = uma etiqueta), com aviso de NF antes de imprimir. Ainda não testado com pedido real (imprimir é definitivo).
+  - Etiquetas em lote (PDF ou Zebra, até 50, uma conta por vez; carrinho = uma etiqueta), com aviso de NF antes de imprimir. Testado em 09/10/2026 com pedido real da BELA: etiqueta baixou normalmente.
 - [ ] Separar produtos com leitor (3D)
 - [ ] Ações em lote além das etiquetas
 
 ### Fase 4 — NF e etiquetas
-- [ ] Testar cedo, na conta real, o que o Faturador do ML exige
-- [ ] `FiscalProvider` + Faturador do ML + XML manual
-- [ ] Impressão de etiquetas em lote (PDF/ZPL), respeitando a regra NF → etiqueta
+- [x] Testar cedo, na conta real, o que o Faturador do ML exige
+  - BELA (Simples Nacional) já usa o Faturador; a aplicação lê e emite notas sem permissão extra. Dados fiscais dos anúncios já estão no ML (`can_invoice` = true nos testados).
+- [x] **4A** `FiscalProvider` + Faturador do ML (emitir pelo ERP)
+  - Camada `src/fiscal/` (interface) + `MercadoLivreInvoicer` (`src/connectors/mercadolivre/invoices.ts`); notas na tabela `invoices`, ligadas aos pedidos (carrinho = uma nota).
+  - Pedidos → "Aguardando NF" → "Emitir NF": confere dados fiscais dos anúncios (`can_invoice`), pede confirmação, emite (`POST /users/{id}/invoices/orders`), mostra o resultado por carrinho; erros em português (`/users/invoices/errors/MLB/{código}`). Coluna NF com número, série, DANFE e XML.
+  - Contra nota duplicada: consulta a nota do pedido antes de emitir; uma emissão por carrinho (trava + linha "requesting"); a chamada de emissão nunca é repetida sozinha (resposta perdida → pergunta de novo ao ML).
+  - Notas emitidas pelo painel do ML também entram no ERP (quando o envio passa da etapa de NF). Nota "pending_authorization" (número 0 no ML) é relida até autorizar.
+  - Testado em 09/10/2026: NF real emitida pelo ERP para um pedido da BELA; número, DANFE e XML chegaram ao ERP e a etiqueta foi liberada.
+- [x] Impressão de etiquetas em lote (PDF/ZPL), respeitando a regra NF → etiqueta (ver 3A/3B)
+- [ ] **4B** Mandar dados fiscais dos SKUs do ERP para o ML (`/items/fiscal_information`, CSOSN já no SKU) e vincular SKU ↔ anúncio; importar XML de outro emissor (`/shipments/{id}/invoice_data`, plano B); DANFE + etiqueta juntas
 
 ### Fase 5 — Depois do MVP
 - [ ] Shopee e outros conectores; migração entre marketplaces
