@@ -24,6 +24,7 @@ export function fakeConnector(overrides: Partial<MarketplaceConnector> = {}): Ma
     getShipment: notUsed("getShipment"),
     getShipmentSla: notUsed("getShipmentSla"),
     getShippingLabels: notUsed("getShippingLabels"),
+    getListingForCopy: notUsed("getListingForCopy"),
     suggestCategories: notUsed("suggestCategories"),
     uploadPicture: notUsed("uploadPicture"),
     quoteFees: notUsed("quoteFees"),

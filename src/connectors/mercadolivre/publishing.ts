@@ -183,7 +183,10 @@ export function toPublishBody(listing: CanonicalListing, model: PublishModel) {
     buying_mode: "buy_it_now",
     listing_type_id: listing.listingTypeId,
     condition: listing.condition,
-    pictures: listing.pictures.map((picture) => ({ id: picture.id })),
+    // By id when known; otherwise by URL ("source", documented for POST /items).
+    pictures: listing.pictures.map((picture) =>
+      picture.id ? { id: picture.id } : { source: picture.url },
+    ),
     attributes: listing.attributes.map((attribute) => ({
       id: attribute.id,
       ...(attribute.valueId ? { value_id: attribute.valueId } : {}),

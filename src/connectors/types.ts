@@ -144,6 +144,18 @@ export type FeeQuote = {
 
 export type UploadedPicture = { id: string; url: string | null };
 
+/** Any listing (own or another seller's) read into the canonical model. */
+export type ListingForCopy = {
+  listing: CanonicalListing;
+  /** Seller of the source listing (to know whether picture ids can be reused). */
+  sellerId: string | null;
+  listingModel: ListingModel;
+  /** Traditional listing with variations (not copied yet in 2D). */
+  hasVariations: boolean;
+  permalink: string | null;
+  title: string;
+};
+
 export interface MarketplaceConnector {
   readonly id: MarketplaceId;
   /** Human name for the UI. */
@@ -174,6 +186,9 @@ export interface MarketplaceConnector {
     to: Date,
   ): Promise<MarketplaceOrder[]>;
   getShipment(accessToken: string, externalShipmentId: string): Promise<MarketplaceShipment>;
+
+  // Copy / migrate / replicate (Phase 2D)
+  getListingForCopy(accessToken: string, externalId: string): Promise<ListingForCopy>;
 
   // Creating listings (Phase 2C)
   suggestCategories(accessToken: string, query: string): Promise<CategorySuggestion[]>;

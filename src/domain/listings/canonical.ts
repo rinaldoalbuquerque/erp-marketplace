@@ -24,12 +24,16 @@ const attributeValueSchema = z.object({
   valueName: z.string().max(500).nullable(),
 });
 
-const pictureSchema = z.object({
-  /** Marketplace picture id (after upload) */
-  id: z.string().min(1).max(200),
-  /** Preview URL returned by the marketplace, when known */
-  url: z.string().url().max(1000).nullable(),
-});
+const pictureSchema = z
+  .object({
+    /** Marketplace picture id (after upload, or of the same seller's listing) */
+    id: z.string().min(1).max(200).nullable(),
+    /** Picture URL: preview, and the source when there is no id (copies from other sellers) */
+    url: z.string().url().max(1000).nullable(),
+  })
+  .refine((picture) => picture.id !== null || picture.url !== null, {
+    error: "Foto sem código nem endereço.",
+  });
 
 export const canonicalListingSchema = z.object({
   /** User Products: generic name of the family; the marketplace builds the title. */

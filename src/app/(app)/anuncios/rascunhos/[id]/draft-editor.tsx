@@ -470,7 +470,7 @@ export function DraftEditor({
           {pictures.length ? (
             <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {pictures.map((picture, index) => (
-                <li key={picture.id} className="flex flex-col gap-1">
+                <li key={picture.id ?? picture.url} className="flex flex-col gap-1">
                   <div className="flex aspect-square items-center justify-center overflow-hidden rounded-lg border border-border bg-bg">
                     {picture.url ? (
                       // eslint-disable-next-line @next/next/no-img-element -- ML-hosted preview
@@ -504,7 +504,9 @@ export function DraftEditor({
                         type="button"
                         aria-label="Remover foto"
                         onClick={() =>
-                          setPictures((current) => current.filter((item) => item.id !== picture.id))
+                          setPictures((current) =>
+                            current.filter((_, position) => position !== index),
+                          )
                         }
                         className="text-muted hover:text-danger"
                       >
