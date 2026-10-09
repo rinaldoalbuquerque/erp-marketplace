@@ -6,12 +6,14 @@ import { MarketplaceApiError, type MarketplaceOrder } from "@/connectors/types";
 import { STOCK_NOTES } from "@/domain/orders/stock-rules";
 import { db } from "@/server/db";
 import { encryptTokens } from "@/server/marketplaces/token-service";
+import { printLabels } from "@/server/orders/labels";
 import { saveOrder, type OrderAccount } from "@/server/orders/order-service";
 import {
   catchUpOrders,
   processNotifications,
   recordNotification,
 } from "@/server/orders/order-sync";
+import { tenantDb } from "@/server/tenant/tenant-db";
 import { fakeConnector } from "@/test/fake-connector";
 
 // Real database (`npm run test:db`) in a TEMPORARY organization deleted at the end.
@@ -373,5 +375,50 @@ describe("shipments against the database", () => {
       where: { organizationId, externalId: open.externalId },
     });
     expect(refreshed.stage).toBe("invoice_pending");
+  });
+
+  it("labels: only printable shipments, one label per cart, refused ones explained", async () => {
+    const cartA = order({ shippingId: "9001", packId: "P9" });
+    const cartB = order({ shippingId: "9001", packId: "P9" });
+    const waitingNf = order({ shippingId: "9002" });
+    const ids: string[] = [];
+    for (const sale of [cartA, cartB, waitingNf]) {
+      ids.push((await saveOrder(account, sale, new Date())).orderId);
+    }
+    await db.order.updateMany({
+      where: { organizationId, shippingId: "9001" },
+      data: { stage: "ready_to_print", shipmentMode: "me2" },
+    });
+    await db.order.updateMany({
+      where: { organizationId, shippingId: "9002" },
+      data: { stage: "invoice_pending", shipmentMode: "me2" },
+    });
+
+    const asked: string[][] = [];
+    const connector = fakeConnector({
+      getShippingLabels: async (_token, shipmentIds) => {
+        asked.push(shipmentIds);
+        return { contentType: "application/pdf", data: new ArrayBuffer(4) };
+      },
+      getShipment: async (_token, id) => ({
+        ...shipment("ready_to_ship", "printed"),
+        externalId: id,
+      }),
+      getShipmentSla: async () => null,
+    });
+    const result = await printLabels(tenantDb(organizationId), organizationId, ids, "pdf", {
+      key,
+      connectorFor: () => connector,
+    });
+    expect(result).toMatchObject({ status: "ok", labels: 1, skipped: 1 });
+    expect(asked).toEqual([["9001"]]);
+    const printed = await db.order.findMany({ where: { organizationId, shippingId: "9001" } });
+    expect(printed.map((row) => row.stage)).toEqual(["printed", "printed"]);
+
+    const none = await printLabels(tenantDb(organizationId), organizationId, [ids[2]!], "pdf", {
+      key,
+      connectorFor: () => connector,
+    });
+    expect(none.status).toBe("none_printable");
   });
 });
