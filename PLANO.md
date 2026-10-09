@@ -130,7 +130,8 @@ ERP para gerenciar marketplaces, começando pelo Mercado Livre, com foco em **pr
 - [x] **2A+** Criar produtos e SKUs do ERP a partir dos anúncios importados (com revisão antes)
   - Produtos > "Criar a partir dos anúncios": um SKU por código do ML, produto = família UP, EAN/marca/peso/medidas dos atributos, estoque inicial opcional (maior valor), vinculação automática no fim. Testado em 08/10/2026.
   - Anúncios sem SKU no ML (75 + 20 com variações sem SKU) não viram produto: listados na revisão.
-- [ ] Preencher dados fiscais em massa (NCM, origem, CFOP para vários SKUs de uma vez): os produtos criados dos anúncios nascem sem fiscal
+- [x] Preencher dados fiscais em massa (NCM, origem, CFOP para vários SKUs de uma vez): os produtos criados dos anúncios nascem sem fiscal
+  - Produtos > "Dados fiscais em massa" (`/produtos/fiscal`): só os campos preenchidos são aplicados; seleção por SKU, produto, página ou "todos do filtro" (refeito no servidor). Testado em 08/10/2026.
 - [ ] **2B** Renderizador de formulário por categoria + edição de anúncios (valida o motor do formulário)
 - [ ] **2C** Criar anúncio: sugestão de categoria, simulador de preço, validação, publicação, rascunhos
 - [ ] **2D** Replicação, cópia de fora e migração entre contas (reaproveita formulário e rascunhos), com fila em segundo plano
