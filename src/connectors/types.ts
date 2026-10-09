@@ -100,6 +100,29 @@ export type MarketplaceOrder = {
   raw: unknown;
 };
 
+/** Shipment of an order (neutral shape). */
+export type MarketplaceShipment = {
+  externalId: string;
+  status: string | null;
+  substatus: string | null;
+  /** e.g. me2 (labels only exist for me2) */
+  mode: string | null;
+  /** e.g. xd_drop_off, cross_docking, self_service, fulfillment */
+  logisticType: string | null;
+  trackingNumber: string | null;
+  /** Label released only from this moment (substatus buffered) */
+  labelAvailableAt: Date | null;
+  raw: unknown;
+};
+
+/** Dispatch deadline promised to the buyer. */
+export type ShipmentSla = { expectedDate: Date | null; status: string | null };
+
+export type LabelFormat = "pdf" | "zpl";
+
+/** Label file as returned by the marketplace. */
+export type LabelFile = { contentType: string; data: ArrayBuffer };
+
 export interface MarketplaceConnector {
   readonly id: MarketplaceId;
   /** Human name for the UI. */
@@ -129,6 +152,15 @@ export interface MarketplaceConnector {
     from: Date,
     to: Date,
   ): Promise<MarketplaceOrder[]>;
+  getShipment(accessToken: string, externalShipmentId: string): Promise<MarketplaceShipment>;
+  /** Null when the marketplace has no deadline for it (cancelled, Full...). */
+  getShipmentSla(accessToken: string, externalShipmentId: string): Promise<ShipmentSla | null>;
+  /** Labels of up to LABELS_PER_CALL shipments in one file. */
+  getShippingLabels(
+    accessToken: string,
+    externalShipmentIds: string[],
+    format: LabelFormat,
+  ): Promise<LabelFile>;
 
   // Editing (Phase 2B)
   /** Technical sheet of a category, in the neutral shape. */
