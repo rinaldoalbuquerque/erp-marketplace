@@ -8,7 +8,11 @@ import { Field } from "@/components/ui/form";
 import { FormSection, SelectField, TextareaField } from "@/components/ui/fields";
 import type { EditableListing } from "@/connectors/types";
 import { AttributeField } from "@/components/listings/attribute-field";
-import type { AttributeDefinition, AttributeInput } from "@/domain/listings/attributes";
+import {
+  sortForForm,
+  type AttributeDefinition,
+  type AttributeInput,
+} from "@/domain/listings/attributes";
 
 import { saveListingEditAction, type EditPayload } from "./actions";
 
@@ -59,9 +63,7 @@ export function EditListingForm({
   const { main, advanced, readOnly } = useMemo(() => {
     const editable = definitions.filter((definition) => !definition.readOnly);
     return {
-      main: editable
-        .filter((definition) => !definition.hidden)
-        .sort((a, b) => Number(b.required) - Number(a.required)),
+      main: sortForForm(editable.filter((definition) => !definition.hidden)),
       advanced: editable.filter((definition) => definition.hidden),
       readOnly: definitions.filter(
         (definition) => definition.readOnly && initial.readOnlyValues[definition.id],

@@ -10,7 +10,9 @@ import { FormSection, SelectField, TextareaField } from "@/components/ui/fields"
 import { Field } from "@/components/ui/form";
 import type { CategorySuggestion, FeeQuote } from "@/connectors/types";
 import {
+  attributeIdsInErrors,
   fromInput,
+  sortForForm,
   toInput,
   type AttributeDefinition,
   type AttributeInput,
@@ -93,6 +95,21 @@ export function DraftEditor({
       : null,
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  /** Marks the fields a marketplace refusal names (e.g. "[GTIN] are required"). */
+  function markRefused(messages: string[]) {
+    const known = new Set((definitions ?? []).map((definition) => definition.id));
+    const ids = attributeIdsInErrors(messages, known);
+    if (!ids.length) return;
+    setErrors((current) => ({
+      ...current,
+      ...Object.fromEntries(ids.map((id) => [`attr.${id}`, "O Mercado Livre exige este campo."])),
+    }));
+    if (ids.some((id) => definitions?.find((definition) => definition.id === id)?.hidden)) {
+      setAdvancedOpen(true);
+    }
+  }
 
   const [familyName, setFamilyName] = useState(initial.familyName);
   const [title, setTitle] = useState(initial.title);
@@ -130,9 +147,7 @@ export function DraftEditor({
   const { main, advanced } = useMemo(() => {
     const editableDefs = (definitions ?? []).filter((definition) => !definition.readOnly);
     return {
-      main: editableDefs
-        .filter((definition) => !definition.hidden)
-        .sort((a, b) => Number(b.required) - Number(a.required)),
+      main: sortForForm(editableDefs.filter((definition) => !definition.hidden)),
       advanced: editableDefs.filter((definition) => definition.hidden),
     };
   }, [definitions]);
@@ -220,7 +235,14 @@ export function DraftEditor({
           setMessage({ tone: "error", lines: ["Falta preencher:", ...result.missing] });
           break;
         case "refused":
-          setMessage({ tone: "error", lines: ["O Mercado Livre apontou:", ...result.errors] });
+          setMessage({
+            tone: "error",
+            lines: [
+              "O Mercado Livre apontou (campos marcados em vermelho na ficha técnica):",
+              ...result.errors,
+            ],
+          });
+          markRefused(result.errors);
           break;
         default:
           setMessage({ tone: "error", lines: [FAILURES[result.status] ?? "Erro."] });
@@ -256,7 +278,14 @@ export function DraftEditor({
           setMessage({ tone: "error", lines: ["Falta preencher:", ...result.missing] });
           break;
         case "refused":
-          setMessage({ tone: "error", lines: ["O Mercado Livre recusou:", ...result.errors] });
+          setMessage({
+            tone: "error",
+            lines: [
+              "O Mercado Livre recusou (campos marcados em vermelho na ficha técnica):",
+              ...result.errors,
+            ],
+          });
+          markRefused(result.errors);
           break;
         case "unconfirmed":
           setMessage({
@@ -564,7 +593,11 @@ export function DraftEditor({
               </FormSection>
             ) : null}
             {advanced.length ? (
-              <details className="rounded-xl border border-border bg-surface p-5">
+              <details
+                open={advancedOpen}
+                onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+                className="rounded-xl border border-border bg-surface p-5"
+              >
                 <summary className="cursor-pointer font-display text-base font-semibold text-ink">
                   Avançado ({advanced.length} atributos que o Mercado Livre não mostra no formulário
                   dele)

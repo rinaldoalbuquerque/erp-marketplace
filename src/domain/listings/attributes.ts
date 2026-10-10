@@ -167,3 +167,48 @@ export function diffAttributes(
   }
   return { changes, errors };
 }
+
+// ---- Presentation helpers for the technical sheet forms (2B edit, 2C new) ----
+
+/** Label of an attribute field: "*" required; "(pode ser obrigatório)" when the marketplace decides. */
+export function attributeLabel(definition: AttributeDefinition): string {
+  if (definition.required) return `${definition.name} *`;
+  if (definition.conditionalRequired) return `${definition.name} (pode ser obrigatório)`;
+  return definition.name;
+}
+
+/** Extra help for attributes whose marketplace name is hard to recognize. */
+const ATTRIBUTE_HINTS: Record<string, string> = {
+  GTIN: "EAN / código de barras. Sem código? Preencha “Motivo de GTIN vazio” em Avançado.",
+  EMPTY_GTIN_REASON: "Use só quando o produto não tem código de barras (GTIN/EAN).",
+  SELLER_SKU: "Seu código interno do produto.",
+};
+
+export function attributeHint(definition: AttributeDefinition): string | undefined {
+  return ATTRIBUTE_HINTS[definition.id];
+}
+
+/** Form order: required, then "may be required", then the rest (stable otherwise). */
+export function sortForForm(definitions: AttributeDefinition[]): AttributeDefinition[] {
+  const rank = (definition: AttributeDefinition) =>
+    definition.required ? 0 : definition.conditionalRequired ? 1 : 2;
+  return [...definitions].sort((a, b) => rank(a) - rank(b));
+}
+
+/**
+ * Attribute ids named in marketplace refusals, e.g. ML:
+ * "The attributes [GTIN] are required for category [MLB192369]..." -> ["GTIN"]
+ * Only ids present in `known` are returned (the category id is ignored).
+ */
+export function attributeIdsInErrors(errors: string[], known: Set<string>): string[] {
+  const found = new Set<string>();
+  for (const error of errors) {
+    for (const match of error.matchAll(/\[([^\]]+)\]/g)) {
+      for (const id of match[1]!.split(",")) {
+        const clean = id.trim();
+        if (known.has(clean)) found.add(clean);
+      }
+    }
+  }
+  return [...found];
+}

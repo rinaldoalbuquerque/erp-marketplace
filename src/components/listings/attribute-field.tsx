@@ -2,7 +2,12 @@
 
 import { Field } from "@/components/ui/form";
 import { SelectField } from "@/components/ui/fields";
-import type { AttributeDefinition, AttributeInput } from "@/domain/listings/attributes";
+import {
+  attributeHint,
+  attributeLabel,
+  type AttributeDefinition,
+  type AttributeInput,
+} from "@/domain/listings/attributes";
 
 // Shared by the edit screen (2B) and the new listing screen (2C).
 
@@ -18,7 +23,8 @@ export function AttributeField({
   error?: string;
   onChange: (next: AttributeInput) => void;
 }) {
-  const label = `${definition.name}${definition.required ? " *" : ""}`;
+  const label = attributeLabel(definition);
+  const hint = attributeHint(definition);
   const notApplicable = Boolean(input.notApplicable);
   const naToggle = definition.required ? null : (
     <label className="flex items-center gap-1.5 text-xs text-muted">
@@ -43,6 +49,7 @@ export function AttributeField({
           disabled={notApplicable}
           onChange={(event) => onChange({ value: event.target.value })}
           error={error}
+          hint={hint}
         />
         {naToggle}
       </div>
@@ -61,6 +68,7 @@ export function AttributeField({
             disabled={notApplicable}
             onChange={(event) => onChange({ ...input, value: event.target.value })}
             error={error}
+            hint={hint}
           />
           <select
             aria-label={`Unidade de ${definition.name}`}
@@ -94,6 +102,7 @@ export function AttributeField({
         disabled={notApplicable}
         onChange={(event) => onChange({ value: event.target.value })}
         error={error}
+        hint={hint}
       />
       {listId ? (
         <datalist id={listId}>
