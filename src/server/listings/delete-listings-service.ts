@@ -125,6 +125,8 @@ export async function deleteListingItem(
         message: "Excluído no Mercado Livre.",
       },
     });
+    // The marketplace keeps it as closed (sub_status "deleted").
+    await ctx.tdb.listing.updateMany({ where: { id: listingId }, data: { status: "closed" } });
     await removeListingsFromSystem(ctx.tdb, [listingId]);
     return { kind: "done" };
   } catch (error) {

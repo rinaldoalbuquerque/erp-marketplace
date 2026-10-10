@@ -8,7 +8,7 @@ import { LISTING_TYPES, type ListingTypeId } from "@/domain/listings/canonical";
 import { BatchProgressPanel } from "./batch-progress";
 import { BulkEditPanel, type BulkFilters } from "./bulk-edit-panel";
 import { startReplicateAction } from "./copy-actions";
-import { DeletePanel } from "./delete-panel";
+import { DeleteDialog } from "./delete-dialog";
 
 export const REPLICATE_FORM_ID = "replicate-form";
 
@@ -43,7 +43,7 @@ export function ReplicateBar({
   /** Owner/admin: may delete listings. */
   canDelete?: boolean;
 }) {
-  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteIds, setDeleteIds] = useState<string[] | null>(null);
   const [open, setOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
@@ -112,7 +112,6 @@ export function ReplicateBar({
             onClick={() => {
               setOpen((value) => !value);
               setBulkOpen(false);
-              setDeleteOpen(false);
             }}
             className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3 font-medium text-ink hover:bg-surface-2"
           >
@@ -124,7 +123,6 @@ export function ReplicateBar({
             onClick={() => {
               setBulkOpen((value) => !value);
               setOpen(false);
-              setDeleteOpen(false);
             }}
             className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3 font-medium text-ink hover:bg-surface-2"
           >
@@ -135,9 +133,13 @@ export function ReplicateBar({
             <button
               type="button"
               onClick={() => {
-                setDeleteOpen((value) => !value);
-                setOpen(false);
-                setBulkOpen(false);
+                const ids = checkedIds();
+                if (ids.length === 0) {
+                  setMessage("Marque os anúncios que quer excluir.");
+                  return;
+                }
+                setMessage(null);
+                setDeleteIds(ids);
               }}
               className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3 font-medium text-ink hover:bg-surface-2"
             >
@@ -213,7 +215,7 @@ export function ReplicateBar({
         {bulkOpen ? (
           <BulkEditPanel filters={filters} filterTotal={filterTotal} selectedIds={checkedIds} />
         ) : null}
-        {deleteOpen ? <DeletePanel selectedIds={checkedIds} /> : null}
+        {deleteIds ? <DeleteDialog ids={deleteIds} onClose={() => setDeleteIds(null)} /> : null}
       </form>
     </>
   );

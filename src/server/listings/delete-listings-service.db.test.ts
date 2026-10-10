@@ -135,14 +135,14 @@ describe("delete listings on the marketplace", () => {
 
     const rows = await db.listing.findMany({
       where: { organizationId },
-      select: { externalId: true, removedAt: true },
+      select: { externalId: true, removedAt: true, status: true },
       orderBy: { externalId: "asc" },
     });
-    expect(rows.map((row) => [row.externalId, row.removedAt !== null])).toEqual([
-      ["MLB9100001", true],
-      ["MLB9100002", true],
-      ["MLB9100003", false],
-      ["MLB9100004", false],
+    expect(rows.map((row) => [row.externalId, row.removedAt !== null, row.status])).toEqual([
+      ["MLB9100001", true, "closed"],
+      ["MLB9100002", true, "closed"],
+      ["MLB9100003", false, "active"],
+      ["MLB9100004", false, "active"],
     ]);
     expect(
       await db.listingEdit.count({
