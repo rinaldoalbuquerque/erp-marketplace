@@ -20,9 +20,11 @@ export async function getCategoryAttributesCached(
     where: { marketplace_categoryId: { marketplace, categoryId } },
     select: { attributes: true, fetchedAt: true },
   });
-  if (cached && now.getTime() - cached.fetchedAt.getTime() < CATEGORY_TTL_MS) {
-    return cached.attributes as unknown as AttributeDefinition[];
-  }
+  const fresh = cached && now.getTime() - cached.fetchedAt.getTime() < CATEGORY_TTL_MS;
+  const definitions = (cached?.attributes ?? []) as unknown as AttributeDefinition[];
+  // Sheets cached before the variation flags existed are read again.
+  const hasVariationFlags = definitions.some((definition) => "allowsVariations" in definition);
+  if (fresh && hasVariationFlags) return definitions;
   const attributes = await fetchFresh();
   const json = attributes as unknown as Prisma.InputJsonValue;
   await db.marketplaceCategory.upsert({

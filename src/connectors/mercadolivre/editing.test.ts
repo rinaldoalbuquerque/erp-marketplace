@@ -32,6 +32,20 @@ const callOf = (fn: ReturnType<typeof fakeFetch>, index = 0) => {
 };
 
 describe("normalizeCategoryAttributes", () => {
+  it("reads which attributes may vary and which define the picture", () => {
+    const [color, brand] = normalizeCategoryAttributes([
+      {
+        id: "COLOR",
+        name: "Cor",
+        value_type: "string",
+        tags: { allow_variations: true, defines_picture: true },
+      },
+      { id: "BRAND", name: "Marca", value_type: "string", tags: { required: true } },
+    ]);
+    expect(color).toMatchObject({ allowsVariations: true, definesPicture: true });
+    expect(brand).toMatchObject({ allowsVariations: false, definesPicture: false });
+  });
+
   it("maps the documented category attribute shape", () => {
     const [format, brand, color, width] = normalizeCategoryAttributes([
       {

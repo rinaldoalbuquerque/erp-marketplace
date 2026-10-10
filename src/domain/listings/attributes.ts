@@ -23,6 +23,10 @@ export type AttributeDefinition = {
   maxLength: number | null;
   /** Group name for sections in the form. */
   group: string | null;
+  /** May vary among the variants of a listing (ML tag allow_variations). */
+  allowsVariations?: boolean;
+  /** Defines the picture (e.g. Color): each variant usually has its own photos. */
+  definesPicture?: boolean;
 };
 
 /** Value of one attribute on a listing. valueId "-1" + valueName null = "não se aplica". */

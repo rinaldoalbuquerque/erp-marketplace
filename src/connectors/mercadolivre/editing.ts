@@ -82,6 +82,9 @@ export function normalizeCategoryAttributes(body: unknown): AttributeDefinition[
       multivalued: flag("multivalued"),
       maxLength: attribute.value_max_length ?? null,
       group: attribute.attribute_group_name ?? null,
+      // https://developers.mercadolivre.com.br/pt_br/atributos ("Comportamentos especiais")
+      allowsVariations: flag("allow_variations"),
+      definesPicture: flag("defines_picture"),
     };
   });
 }

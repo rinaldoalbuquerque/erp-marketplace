@@ -39,6 +39,7 @@ const definitions: AttributeDefinition[] = [
     multivalued: false,
     maxLength: null,
     group: null,
+    allowsVariations: false,
   },
 ];
 
