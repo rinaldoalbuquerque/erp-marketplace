@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { MarketplaceValidationError, type ListingForCopy } from "@/connectors/types";
 import { emptyListing } from "@/domain/listings/canonical";
 import { db } from "@/server/db";
-import { copyToDraft } from "@/server/listings/copy-service";
+import { copyToDraft, createVariationDraft } from "@/server/listings/copy-service";
 import { loadDraft } from "@/server/listings/draft-service";
 import { encryptTokens } from "@/server/marketplaces/token-service";
 import { tenantDb } from "@/server/tenant/tenant-db";
@@ -199,14 +199,63 @@ describe("copy listings against the database", () => {
     expect((await run()).status).toBe("duplicate");
   });
 
-  it("listings with variations and missing listings are reported, not copied", async () => {
-    expect(
-      await copyToDraft(
-        ctx(),
-        { sourceExternalId: OWN_ID, targetAccountId },
-        { key, connectorFor: () => connector(source({ hasVariations: true })) },
-      ),
-    ).toEqual({ status: "has_variations" });
+  it("a traditional listing with variations becomes one draft per variation, with its SKU", async () => {
+    const variation = (id: string, color: string, sku: string) => ({
+      externalId: id,
+      attributes: [{ id: "COLOR", valueId: null, valueName: color }],
+      priceCents: 3990,
+      availableQuantity: 2,
+      pictures: [{ id: `PIC-${id}`, url: `https://http2.mlstatic.com/${id}.jpg` }],
+      sellerSku: sku,
+    });
+    const withVariations = source({
+      hasVariations: true,
+      variations: [variation("V1", "Azul", "POTE-AZ"), variation("V2", "Verde", "POTE-VD")],
+    });
+    // Link variation V1 of the own listing to the SKU.
+    const listing = await db.listing.findFirstOrThrow({
+      where: { organizationId, externalId: OWN_ID },
+    });
+    const localVariation = await db.listingVariation.create({
+      data: { organizationId, listingId: listing.id, externalId: "V1", attributes: [] },
+    });
+    await db.skuListingMapping.create({
+      data: {
+        organizationId,
+        skuId,
+        listingId: listing.id,
+        listingVariationId: localVariation.id,
+        variationKey: localVariation.id,
+      },
+    });
+    const accepting = fakeConnector({
+      getListingForCopy: async () => withVariations,
+      getCategoryAttributes: async () => [],
+    });
+    const result = await copyToDraft(
+      ctx(),
+      { sourceExternalId: OWN_ID, targetAccountId },
+      { key, connectorFor: () => accepting },
+    );
+    expect(result.status).toBe("created");
+    const drafts = await db.listingDraft.findMany({
+      where: { id: { in: result.status === "created" ? result.draftIds : [] } },
+      orderBy: { sourceVariationKey: "asc" },
+    });
+    expect(drafts.map((draft) => draft.sourceVariationKey)).toEqual(["V1", "V2"]);
+    expect(drafts[0]?.skuId).toBe(skuId); // V1 linked to the SKU
+    expect(drafts[1]?.skuId).toBeNull();
+    const first = drafts[0]!.content as {
+      familyName: string;
+      priceCents: number;
+      pictures: unknown[];
+    };
+    expect(first.familyName).toBe("Pote Hermético 370ml");
+    expect(first.priceCents).toBe(3990);
+    expect(first.pictures).toEqual([{ id: null, url: "https://http2.mlstatic.com/V1.jpg" }]);
+  });
+
+  it("missing listings are reported, not copied", async () => {
     const missing = fakeConnector({
       getListingForCopy: async () => {
         throw new MarketplaceValidationError(["Item not found"]);
@@ -245,5 +294,76 @@ describe("copy listings against the database", () => {
       where: { id: result.status === "created" ? result.draftId : "" },
     });
     expect(row).toMatchObject({ sourceKind: "external", sourceExternalId: "MLB39565808" });
+  });
+
+  it("new variation: same family, varying attributes and per-listing data left empty", async () => {
+    const up = await db.listing.create({
+      data: {
+        organizationId,
+        marketplaceAccountId: sourceAccountId,
+        marketplace: "mercadolivre",
+        externalId: `MLB${Date.now()}7`,
+        title: "Pote Azul",
+        status: "active",
+        listingModel: "user_products",
+        familyId: "555",
+        raw: {},
+        syncedAt: new Date(),
+      },
+    });
+    const upConnector = fakeConnector({
+      getListingForCopy: async () =>
+        source({
+          familyId: "555",
+          listing: {
+            ...source().listing,
+            attributes: [
+              { id: "BRAND", valueId: null, valueName: "Marca X" },
+              { id: "COLOR", valueId: null, valueName: "Azul" },
+              { id: "GTIN", valueId: null, valueName: "7891234567895" },
+            ],
+          },
+        }),
+      getFamily: async () => ({
+        familyId: "555",
+        familyName: "Pote Hermético",
+        childAttributeIds: ["COLOR"],
+        parentAttributeIds: ["BRAND"],
+      }),
+      getCategoryAttributes: async () => [],
+    });
+    const result = await createVariationDraft(ctx(), up.id, {
+      key,
+      connectorFor: () => upConnector,
+    });
+    expect(result).toMatchObject({ status: "created", family: { childAttributeIds: ["COLOR"] } });
+    const draft = await db.listingDraft.findUniqueOrThrow({
+      where: { id: result.status === "created" ? result.draftId : "" },
+    });
+    expect(draft.targetFamilyId).toBe("555");
+    expect(draft.content).toMatchObject({
+      familyName: "Pote Hermético",
+      pictures: [],
+      attributes: [{ id: "BRAND", valueName: "Marca X" }], // COLOR and GTIN left for the user
+    });
+  });
+
+  it("new variation only for User Products listings", async () => {
+    const traditional = await db.listing.create({
+      data: {
+        organizationId,
+        marketplaceAccountId: sourceAccountId,
+        marketplace: "mercadolivre",
+        externalId: `MLB${Date.now()}8`,
+        title: "Tradicional",
+        status: "active",
+        listingModel: "traditional",
+        raw: {},
+        syncedAt: new Date(),
+      },
+    });
+    expect(await createVariationDraft(ctx(), traditional.id, { key })).toEqual({
+      status: "not_user_products",
+    });
   });
 });

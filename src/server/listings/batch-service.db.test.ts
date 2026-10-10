@@ -40,7 +40,16 @@ function source(id: string, hasVariations = false): ListingForCopy {
     sellerId: "2",
     listingModel: "user_products",
     hasVariations,
-    variations: [],
+    variations: hasVariations
+      ? ["9001", "9002"].map((variationId) => ({
+          externalId: variationId,
+          attributes: [{ id: "COLOR", valueId: null, valueName: `Cor ${variationId}` }],
+          priceCents: 1000,
+          availableQuantity: 1,
+          pictures: [{ id: null, url: "https://http2.mlstatic.com/v.jpg" }],
+          sellerSku: null,
+        }))
+      : [],
     familyId: null,
     permalink: null,
     title: `Produto ${id}`,
@@ -126,13 +135,19 @@ describe("batch jobs against the database", () => {
       status: "completed",
       total: 3,
       processed: 3,
-      done: 2,
+      done: 3,
       skipped: 0,
-      failed: 1,
-      errors: [{ id: "MLB1000003", message: "Anúncio com variações: ainda não é copiado." }],
+      failed: 0,
     });
+    // 2 simple listings + 1 listing with 2 variations = 4 drafts
     const drafts = await db.listingDraft.findMany({ where: { batchJobId: jobId } });
-    expect(drafts).toHaveLength(2);
+    expect(drafts).toHaveLength(4);
+    expect(
+      drafts
+        .filter((draft) => draft.sourceExternalId === "MLB1000003")
+        .map((draft) => draft.sourceVariationKey)
+        .sort(),
+    ).toEqual(["9001", "9002"]);
     expect(
       drafts.every((draft) => (draft.content as { priceCents: number }).priceCents === 1100),
     ).toBe(true);

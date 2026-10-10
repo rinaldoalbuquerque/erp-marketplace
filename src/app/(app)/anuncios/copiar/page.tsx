@@ -13,7 +13,7 @@ const ERRORS: Record<string, string> = {
   link: "Não encontrei um código de anúncio (MLB…) no que foi colado.",
   conta: "Escolha a conta onde o rascunho será criado.",
   duplicate: "Esse anúncio já foi copiado.",
-  has_variations: "Anúncio com variações: ainda não é copiado.",
+  has_variations: "Anúncio com variações: a conta de destino precisa usar User Products.",
   not_found: "Anúncio não encontrado no Mercado Livre.",
   not_readable:
     "O Mercado Livre não permite mais ler anúncios de outros vendedores. Use o link da página do produto no catálogo (endereço com /p/MLB…), ou crie o anúncio a partir de um SKU.",

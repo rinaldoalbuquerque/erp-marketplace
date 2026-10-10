@@ -125,7 +125,7 @@ type Outcome =
   | { kind: "retry"; message: string };
 
 const COPY_MESSAGES = {
-  has_variations: "Anúncio com variações: ainda não é copiado.",
+  has_variations: "Anúncio com variações: a conta de destino precisa usar User Products.",
   not_found: "Anúncio não encontrado no Mercado Livre.",
   not_readable: "Anúncio de outro vendedor: o Mercado Livre não permite ler.",
 } as const;
