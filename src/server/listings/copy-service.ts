@@ -4,7 +4,6 @@ import {
   MarketplaceApiError,
   MarketplaceAuthError,
   MarketplaceValidationError,
-  type CopyVariation,
   type ListingFamily,
   type ListingForCopy,
   type MarketplaceConnector,
@@ -13,6 +12,7 @@ import {
 import type { AttributeValue } from "@/domain/listings/attributes";
 import {
   canonicalListingSchema,
+  emptyVariant,
   type CanonicalListing,
   type ListingTypeId,
 } from "@/domain/listings/canonical";
@@ -54,8 +54,8 @@ export type CopyResult =
       status: "created";
       /** First draft (opened after a single copy). */
       draftId: string;
-      /** One per variation for traditional listings with variations. */
-      draftIds: string[];
+      /** Variants in the draft (0 = simple listing). */
+      variants: number;
       /** The pasted id was a catalog product (copied from the catalog data). */
       catalogProductId: string | null;
       copiedExternalId: string;
@@ -107,13 +107,6 @@ async function acceptedAttributes(
     if (error instanceof MarketplaceAuthError) throw error;
     return null; // validation will point problems
   }
-}
-
-/** Base attributes overridden by the variation's own (same id). */
-function mergeAttributes(base: AttributeValue[], variation: AttributeValue[]): AttributeValue[] {
-  const byId = new Map(base.map((attribute) => [attribute.id, attribute]));
-  for (const attribute of variation) byId.set(attribute.id, attribute);
-  return [...byId.values()];
 }
 
 const byUrl = (pictures: CanonicalListing["pictures"]) =>
@@ -190,68 +183,149 @@ export async function copyToDraft(
       ? readToken
       : await getAccessToken(ctx.organizationId, target.id, deps);
     const accepted = await acceptedAttributes(connector, targetToken, source.listing.categoryId);
+    const keep = (attributes: AttributeValue[]) =>
+      accepted ? attributes.filter((attribute) => accepted.has(attribute.id)) : attributes;
+    const price = (cents: number | null) =>
+      cents !== null && input.options?.price ? adjustPrice(cents, input.options.price) : cents;
+    const pictures = (list: CanonicalListing["pictures"]) => (sameAccount ? list : byUrl(list));
 
-    // One draft for a simple listing; one per variation otherwise.
-    const units: Array<{ variation: CopyVariation | null }> = source.hasVariations
-      ? source.variations.map((variation) => ({ variation }))
-      : [{ variation: null }];
+    let listing: CanonicalListing = { ...source.listing };
+    // Same key for every listing of one family: a batch copies a family once.
+    let sourceKey = sourceExternalId;
+    let draftSku: { id: string; stockOnHand: number } | null = null;
 
-    const draftIds: string[] = [];
-    for (const { variation } of units) {
-      const listing: CanonicalListing = { ...source.listing };
-      if (variation) {
-        // Same family for all variations: the source title becomes the family name.
-        listing.familyName = source.title.slice(0, 200);
-        listing.attributes = mergeAttributes(listing.attributes, variation.attributes);
-        if (variation.sellerSku) {
-          listing.attributes = mergeAttributes(listing.attributes, [
-            { id: "SELLER_SKU", valueId: null, valueName: variation.sellerSku },
-          ]);
-        }
-        if (variation.priceCents !== null) listing.priceCents = variation.priceCents;
-        listing.availableQuantity = variation.availableQuantity;
-        if (variation.pictures.length) listing.pictures = variation.pictures;
-      }
-      if (!sameAccount) listing.pictures = byUrl(listing.pictures);
-      if (accepted) {
-        listing.attributes = listing.attributes.filter((attribute) => accepted.has(attribute.id));
-      }
-      if (input.options?.price && listing.priceCents !== null) {
-        listing.priceCents = adjustPrice(listing.priceCents, input.options.price);
-      }
-      if (input.options?.listingTypeId) listing.listingTypeId = input.options.listingTypeId;
-      const sku = skuFor(variation?.externalId ?? null);
-      if (sku) listing.availableQuantity = Math.max(0, sku.stockOnHand);
+    // Own User Products listing with siblings in its family -> one draft, one variant per sibling.
+    const siblings =
+      own &&
+      source.familyId &&
+      source.listingModel === "user_products" &&
+      target.listingModel === "user_products"
+        ? await ctx.tdb.listing.findMany({
+            where: {
+              marketplaceAccountId: own.marketplaceAccountId,
+              familyId: source.familyId,
+              status: { not: "closed" },
+            },
+            orderBy: { externalId: "asc" },
+            select: {
+              externalId: true,
+              mappings: {
+                where: { variationKey: "" },
+                select: { sku: { select: { id: true, stockOnHand: true } } },
+              },
+            },
+          })
+        : [];
 
-      try {
-        const draft = await ctx.tdb.listingDraft.create({
-          data: {
-            organizationId: ctx.organizationId,
-            marketplaceAccountId: target.id,
+    if (siblings.length > 1) {
+      const family = await connector.getFamily(readToken, source.familyId!);
+      const varying = family?.childAttributeIds ?? [];
+      const members: Array<{
+        copy: ListingForCopy;
+        sku: { id: string; stockOnHand: number } | null;
+      }> = [];
+      for (const sibling of siblings) {
+        const copy =
+          sibling.externalId === sourceExternalId
+            ? source
+            : await connector.getListingForCopy(readToken, sibling.externalId);
+        members.push({ copy, sku: sibling.mappings[0]?.sku ?? null });
+      }
+      const value = (copy: ListingForCopy, id: string) =>
+        copy.listing.attributes.find((attribute) => attribute.id === id)?.valueName ?? null;
+      listing = {
+        ...source.listing,
+        familyName: family?.familyName || source.listing.familyName,
+        attributes: keep(
+          source.listing.attributes.filter(
+            (attribute) =>
+              !varying.includes(attribute.id) && !PER_LISTING_ATTRIBUTES.has(attribute.id),
+          ),
+        ),
+        pictures: [],
+        variationAttributeIds: varying,
+        variants: members.map(({ copy, sku }, index) => ({
+          ...emptyVariant(String(index + 1)),
+          attributes: copy.listing.attributes.filter((attribute) => varying.includes(attribute.id)),
+          priceCents: price(copy.listing.priceCents),
+          availableQuantity: sku ? Math.max(0, sku.stockOnHand) : copy.listing.availableQuantity,
+          pictures: pictures(copy.listing.pictures),
+          gtin: value(copy, "GTIN"),
+          emptyGtinReason: value(copy, "EMPTY_GTIN_REASON"),
+          sellerSku: value(copy, "SELLER_SKU"),
+          skuId: sku?.id ?? null,
+        })),
+      };
+      sourceKey = `family:${source.familyId}`;
+    } else if (source.hasVariations) {
+      // Traditional listing with variations -> one draft, one variant per variation.
+      const varying = [
+        ...new Set(
+          source.variations.flatMap((variation) =>
+            variation.attributes.map((attribute) => attribute.id),
+          ),
+        ),
+      ];
+      listing = {
+        ...source.listing,
+        familyName: source.title.slice(0, 200),
+        attributes: keep(
+          source.listing.attributes.filter(
+            (attribute) =>
+              !varying.includes(attribute.id) && !PER_LISTING_ATTRIBUTES.has(attribute.id),
+          ),
+        ),
+        pictures: pictures(source.listing.pictures),
+        variationAttributeIds: varying.slice(0, 5),
+        variants: source.variations.map((variation) => {
+          const sku = skuFor(variation.externalId);
+          return {
+            ...emptyVariant(variation.externalId),
+            attributes: variation.attributes,
+            priceCents: price(variation.priceCents),
+            availableQuantity: sku ? Math.max(0, sku.stockOnHand) : variation.availableQuantity,
+            pictures: pictures(variation.pictures),
+            sellerSku: variation.sellerSku,
             skuId: sku?.id ?? null,
-            content: canonicalListingSchema.parse(listing) as unknown as Prisma.InputJsonValue,
-            sourceKind: own ? "own" : "external",
-            sourceExternalId,
-            sourceVariationKey: variation?.externalId ?? "",
-            sourceAccountId: own?.marketplaceAccountId ?? null,
-            batchJobId: input.batchJobId ?? null,
-            createdById: ctx.userId,
-          },
-          select: { id: true },
-        });
-        draftIds.push(draft.id);
-      } catch (error) {
-        if (!isUniqueViolation(error)) throw error; // already copied in this batch
-      }
+          };
+        }),
+      };
+    } else {
+      // Simple listing.
+      listing.pictures = pictures(listing.pictures);
+      listing.attributes = keep(listing.attributes);
+      draftSku = skuFor(null);
+      if (draftSku) listing.availableQuantity = Math.max(0, draftSku.stockOnHand);
     }
-    if (draftIds.length === 0) return { status: "duplicate" };
-    return {
-      status: "created",
-      draftId: draftIds[0]!,
-      draftIds,
-      catalogProductId,
-      copiedExternalId: sourceExternalId,
-    };
+    listing.priceCents = price(listing.priceCents);
+    if (input.options?.listingTypeId) listing.listingTypeId = input.options.listingTypeId;
+
+    try {
+      const draft = await ctx.tdb.listingDraft.create({
+        data: {
+          organizationId: ctx.organizationId,
+          marketplaceAccountId: target.id,
+          skuId: draftSku?.id ?? null,
+          content: canonicalListingSchema.parse(listing) as unknown as Prisma.InputJsonValue,
+          sourceKind: own ? "own" : "external",
+          sourceExternalId: sourceKey,
+          sourceAccountId: own?.marketplaceAccountId ?? null,
+          batchJobId: input.batchJobId ?? null,
+          createdById: ctx.userId,
+        },
+        select: { id: true },
+      });
+      return {
+        status: "created",
+        draftId: draft.id,
+        variants: listing.variants.length,
+        catalogProductId,
+        copiedExternalId: sourceExternalId,
+      };
+    } catch (error) {
+      if (isUniqueViolation(error)) return { status: "duplicate" }; // already copied in this batch
+      throw error;
+    }
   } catch (error) {
     return failureOf(error);
   }

@@ -139,14 +139,14 @@ describe("batch jobs against the database", () => {
       skipped: 0,
       failed: 0,
     });
-    // 2 simple listings + 1 listing with 2 variations = 4 drafts
+    // 2 simple listings + 1 listing with 2 variations (one draft with 2 variants) = 3 drafts
     const drafts = await db.listingDraft.findMany({ where: { batchJobId: jobId } });
-    expect(drafts).toHaveLength(4);
+    expect(drafts).toHaveLength(3);
+    const withVariants = drafts.find((draft) => draft.sourceExternalId === "MLB1000003");
     expect(
-      drafts
-        .filter((draft) => draft.sourceExternalId === "MLB1000003")
-        .map((draft) => draft.sourceVariationKey)
-        .sort(),
+      (withVariants?.content as { variants: Array<{ key: string }> }).variants.map(
+        (variant) => variant.key,
+      ),
     ).toEqual(["9001", "9002"]);
     expect(
       drafts.every((draft) => (draft.content as { priceCents: number }).priceCents === 1100),

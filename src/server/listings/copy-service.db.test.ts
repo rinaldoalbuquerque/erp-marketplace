@@ -199,7 +199,7 @@ describe("copy listings against the database", () => {
     expect((await run()).status).toBe("duplicate");
   });
 
-  it("a traditional listing with variations becomes one draft per variation, with its SKU", async () => {
+  it("a traditional listing with variations becomes one draft with its variants (SKU per variant)", async () => {
     const variation = (id: string, color: string, sku: string) => ({
       externalId: id,
       attributes: [{ id: "COLOR", valueId: null, valueName: color }],
@@ -237,22 +237,31 @@ describe("copy listings against the database", () => {
       { sourceExternalId: OWN_ID, targetAccountId },
       { key, connectorFor: () => accepting },
     );
-    expect(result.status).toBe("created");
-    const drafts = await db.listingDraft.findMany({
-      where: { id: { in: result.status === "created" ? result.draftIds : [] } },
-      orderBy: { sourceVariationKey: "asc" },
+    expect(result).toMatchObject({ status: "created", variants: 2 });
+    const draft = await db.listingDraft.findUniqueOrThrow({
+      where: { id: result.status === "created" ? result.draftId : "" },
     });
-    expect(drafts.map((draft) => draft.sourceVariationKey)).toEqual(["V1", "V2"]);
-    expect(drafts[0]?.skuId).toBe(skuId); // V1 linked to the SKU
-    expect(drafts[1]?.skuId).toBeNull();
-    const first = drafts[0]!.content as {
+    const content = draft.content as {
       familyName: string;
-      priceCents: number;
-      pictures: unknown[];
+      variationAttributeIds: string[];
+      variants: Array<{
+        key: string;
+        skuId: string | null;
+        priceCents: number;
+        pictures: unknown[];
+        sellerSku: string;
+      }>;
     };
-    expect(first.familyName).toBe("Pote Hermético 370ml");
-    expect(first.priceCents).toBe(3990);
-    expect(first.pictures).toEqual([{ id: null, url: "https://http2.mlstatic.com/V1.jpg" }]);
+    expect(content.familyName).toBe("Pote Hermético 370ml");
+    expect(content.variationAttributeIds).toEqual(["COLOR"]);
+    expect(content.variants.map((variant) => variant.key)).toEqual(["V1", "V2"]);
+    expect(content.variants[0]).toMatchObject({
+      skuId, // V1 linked to the SKU
+      priceCents: 3990,
+      sellerSku: "POTE-AZ",
+      pictures: [{ id: null, url: "https://http2.mlstatic.com/V1.jpg" }],
+    });
+    expect(content.variants[1]?.skuId).toBeNull();
   });
 
   it("missing listings are reported, not copied", async () => {
@@ -364,6 +373,83 @@ describe("copy listings against the database", () => {
     });
     expect(await createVariationDraft(ctx(), traditional.id, { key })).toEqual({
       status: "not_user_products",
+    });
+  });
+
+  it("a User Products family is copied as one draft (siblings = variants), once per batch", async () => {
+    const stamp = Date.now();
+    const ids = [`MLB${stamp}21`, `MLB${stamp}22`];
+    for (const externalId of ids) {
+      await db.listing.create({
+        data: {
+          organizationId,
+          marketplaceAccountId: sourceAccountId,
+          marketplace: "mercadolivre",
+          externalId,
+          title: externalId,
+          status: "active",
+          listingModel: "user_products",
+          familyId: "FAM-77",
+          raw: {},
+          syncedAt: new Date(),
+        },
+      });
+    }
+    const colorOf: Record<string, string> = { [ids[0]!]: "Azul", [ids[1]!]: "Verde" };
+    const familyConnector = fakeConnector({
+      getListingForCopy: async (_token, externalId) =>
+        source({
+          familyId: "FAM-77",
+          title: `Pote ${colorOf[externalId]}`,
+          listing: {
+            ...source().listing,
+            priceCents: externalId === ids[0] ? 2990 : 3190,
+            attributes: [
+              { id: "BRAND", valueId: null, valueName: "Marca X" },
+              { id: "COLOR", valueId: null, valueName: colorOf[externalId]! },
+              { id: "GTIN", valueId: null, valueName: `GTIN-${colorOf[externalId]}` },
+            ],
+          },
+        }),
+      getFamily: async () => ({
+        familyId: "FAM-77",
+        familyName: "Pote Hermético",
+        childAttributeIds: ["COLOR"],
+        parentAttributeIds: ["BRAND"],
+      }),
+      getCategoryAttributes: async () => [],
+    });
+    const job = await db.syncJob.create({
+      data: { organizationId, marketplaceAccountId: targetAccountId, type: "replicate_listings" },
+    });
+    const deps = { key, connectorFor: () => familyConnector };
+    const first = await copyToDraft(
+      ctx(),
+      { sourceExternalId: ids[0]!, targetAccountId, batchJobId: job.id },
+      deps,
+    );
+    expect(first).toMatchObject({ status: "created", variants: 2 });
+    // The sibling of the same family in the same batch: already copied.
+    expect(
+      await copyToDraft(
+        ctx(),
+        { sourceExternalId: ids[1]!, targetAccountId, batchJobId: job.id },
+        deps,
+      ),
+    ).toEqual({ status: "duplicate" });
+
+    const draft = await db.listingDraft.findUniqueOrThrow({
+      where: { id: first.status === "created" ? first.draftId : "" },
+    });
+    expect(draft.sourceExternalId).toBe("family:FAM-77");
+    expect(draft.content).toMatchObject({
+      familyName: "Pote Hermético",
+      variationAttributeIds: ["COLOR"],
+      attributes: [{ id: "BRAND", valueName: "Marca X" }],
+      variants: [
+        { attributes: [{ id: "COLOR", valueName: "Azul" }], gtin: "GTIN-Azul", priceCents: 2990 },
+        { attributes: [{ id: "COLOR", valueName: "Verde" }], gtin: "GTIN-Verde", priceCents: 3190 },
+      ],
     });
   });
 });
