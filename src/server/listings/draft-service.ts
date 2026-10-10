@@ -662,3 +662,30 @@ export async function draftSkuOptions(tdb: TenantDb, draftId: string) {
     select: { id: true, code: true, variation: true, stockOnHand: true },
   });
 }
+
+/** Uploads a picture for a variant row (the form keeps it and saves it with the draft). */
+export async function uploadVariantPicture(
+  ctx: Ctx,
+  draftId: string,
+  file: Blob,
+  filename: string,
+  deps: DraftDeps = {},
+): Promise<
+  | { status: "ok"; picture: { id: string; url: string | null } }
+  | Failure
+  | { status: "locked" | "invalid" }
+> {
+  if (file.size === 0 || file.size > MAX_PICTURE_BYTES) return { status: "invalid" };
+  const market = await marketplaceFor(ctx, draftId, deps);
+  if (market.status !== "ok") return market;
+  if (!market.draft.editable) return { status: "locked" };
+  try {
+    return {
+      status: "ok",
+      picture: await market.connector.uploadPicture(market.token, file, filename),
+    };
+  } catch (error) {
+    if (error instanceof MarketplaceValidationError) return { status: "invalid" };
+    return failureOf(error);
+  }
+}

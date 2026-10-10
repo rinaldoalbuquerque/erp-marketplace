@@ -144,7 +144,7 @@ async function Draft({
         </p>
       ) : null}
 
-      {draft.editable ? (
+      {draft.editable && draft.listing.variants.length === 0 ? (
         <form
           action={setDraftSkuAction.bind(null, draft.id)}
           className="mb-5 flex max-w-4xl flex-col gap-2 rounded-xl border border-border bg-surface p-4 text-sm sm:flex-row sm:items-end"
@@ -196,6 +196,16 @@ async function Draft({
         initialDefinitions={definitions}
         lastErrors={draft.status === "failed" ? draft.lastErrors : []}
         varyingIds={family?.childAttributeIds ?? []}
+        skuOptions={skuOptions.map((sku) => ({
+          id: sku.id,
+          code: sku.code,
+          label: `${sku.code} · ${variationLabel(sku.variation)} · est. ${sku.stockOnHand}`,
+        }))}
+        published={Object.fromEntries(
+          Object.entries(draft.publishedVariants as Record<string, { externalId: string }>).map(
+            ([key, value]) => [key, value.externalId],
+          ),
+        )}
         sku={
           draft.sku
             ? {

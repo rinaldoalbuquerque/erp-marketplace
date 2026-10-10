@@ -27,9 +27,13 @@ import {
 } from "@/domain/listings/canonical";
 import { centsToInput, formatCents, parseBrlToCents } from "@/domain/products/money";
 
+import type { VariantOutcome } from "@/server/listings/draft-service";
+
+import { fromRow, toRow, VariantsEditor, type SkuOption, type VariantRow } from "./variants-editor";
 import {
   categoryAttributesAction,
   publishDraftAction,
+  uploadVariantPictureAction,
   quoteFeesAction,
   saveDraftAction,
   suggestCategoriesAction,
@@ -38,6 +42,18 @@ import {
 } from "../actions";
 
 type Message = { tone: "success" | "error" | "signal"; lines: string[] };
+
+const OUTCOME_TEXT = {
+  published: "publicada",
+  already: "já estava publicada",
+  refused: "recusada",
+  unconfirmed: "sem confirmação do Mercado Livre",
+  not_sent: "não enviada",
+} as const;
+
+function outcomeLine(variant: VariantOutcome): string {
+  return `• ${variant.label}: ${OUTCOME_TEXT[variant.status]}${variant.externalId ? ` (${variant.externalId})` : ""}${variant.error ? ` — ${variant.error}` : ""}`;
+}
 
 const MAX_SIDE = 1920; // ML keeps pictures up to 1920 px
 
@@ -77,6 +93,8 @@ export function DraftEditor({
   lastErrors,
   varyingIds = [],
   sku,
+  skuOptions = [],
+  published = {},
 }: {
   draftId: string;
   model: PublishModel;
@@ -89,6 +107,10 @@ export function DraftEditor({
   varyingIds?: string[];
   /** costCents only when the member may see costs */
   sku: { code: string; costCents: number | null; stockOnHand: number } | null;
+  /** SKUs offered for the variants (same product). */
+  skuOptions?: SkuOption[];
+  /** Variant key -> marketplace id of the variants already published. */
+  published?: Record<string, string>;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -124,6 +146,13 @@ export function DraftEditor({
   const [pictures, setPictures] = useState(initial.pictures);
   const [warrantyType, setWarrantyType] = useState(initial.warranty.type ?? "");
   const [warrantyTime, setWarrantyTime] = useState(initial.warranty.time ?? "");
+  const [kind, setKind] = useState<"simple" | "variants">(
+    initial.variants.length ? "variants" : "simple",
+  );
+  const [variationIds, setVariationIds] = useState(initial.variationAttributeIds);
+  const [rows, setRows] = useState<VariantRow[]>(() => initial.variants.map(toRow));
+  const [uploadingVariant, setUploadingVariant] = useState<string | null>(null);
+  const anyPublished = Object.keys(published).length > 0;
 
   const [categoryId, setCategoryId] = useState(initial.categoryId);
   const [categoryName, setCategoryName] = useState(initial.categoryName);
@@ -149,15 +178,18 @@ export function DraftEditor({
 
   const { varying, main, advanced } = useMemo(() => {
     const editableDefs = (definitions ?? []).filter((definition) => !definition.readOnly);
-    const isVarying = (id: string) => varyingIds.includes(id);
+    // Attributes edited elsewhere: the variant table, or "o que muda" of a new variation.
+    const isVarying = (id: string) =>
+      (kind === "variants" ? variationIds : varyingIds).includes(id);
     return {
-      varying: editableDefs.filter((definition) => isVarying(definition.id)),
+      varying:
+        kind === "variants" ? [] : editableDefs.filter((definition) => isVarying(definition.id)),
       main: sortForForm(
         editableDefs.filter((definition) => !definition.hidden && !isVarying(definition.id)),
       ),
       advanced: editableDefs.filter((definition) => definition.hidden && !isVarying(definition.id)),
     };
-  }, [definitions, varyingIds]);
+  }, [definitions, varyingIds, kind, variationIds]);
 
   /** Current form -> canonical listing (null + field errors when something is invalid). */
   function collect(): CanonicalListing | null {
@@ -187,6 +219,14 @@ export function DraftEditor({
         fieldErrors[`attr.${definition.id}`] = "Preencha: é o que muda nesta variação.";
       }
     }
+    const variants = [];
+    if (kind === "variants") {
+      for (const row of rows) {
+        const converted = fromRow(row);
+        if ("error" in converted) fieldErrors[`variant.${row.key}`] = converted.error;
+        else variants.push(converted.variant);
+      }
+    }
     setErrors(fieldErrors);
     if (Object.keys(fieldErrors).length) {
       setMessage({ tone: "error", lines: ["Confira os campos marcados."] });
@@ -205,8 +245,8 @@ export function DraftEditor({
       pictures,
       attributes,
       warranty: { type: warrantyType.trim() || null, time: warrantyTime.trim() || null },
-      variationAttributeIds: initial.variationAttributeIds,
-      variants: initial.variants,
+      variationAttributeIds: kind === "variants" ? variationIds : [],
+      variants: kind === "variants" ? variants : [],
     };
   }
 
@@ -285,16 +325,35 @@ export function DraftEditor({
       if (!(await persist(listing))) return;
       const result = await publishDraftAction(draftId);
       switch (result.status) {
+        case "partial":
+          setMessage({
+            tone: "signal",
+            lines: [
+              `Publicadas ${result.listingIds.length} de ${result.variants.length} variantes. Corrija as que faltaram e publique de novo: só elas serão enviadas.`,
+              ...result.variants.map((variant) => outcomeLine(variant)),
+            ],
+          });
+          markRefused(result.variants.flatMap((variant) => (variant.error ? [variant.error] : [])));
+          break;
         case "published":
           setMessage({
             tone: "success",
             lines: [
-              `Anúncio publicado: ${result.externalId}.`,
+              result.variants.length
+                ? `Família publicada: ${result.variants.length} variantes.`
+                : `Anúncio publicado: ${result.externalId}.`,
+              ...result.variants.map((variant) => outcomeLine(variant)),
               ...(sku ? [`Vinculado ao SKU ${sku.code}.`] : []),
               ...(result.descriptionFailed
                 ? ["A descrição não foi aceita agora; ajuste na tela de edição do anúncio."]
                 : []),
-              ...(result.family === "same" ? ["Entrou na mesma família do anúncio original."] : []),
+              ...(result.family === "same"
+                ? [
+                    result.variants.length
+                      ? "Todas ficaram na mesma família no Mercado Livre."
+                      : "Entrou na mesma família do anúncio original.",
+                  ]
+                : []),
               ...(result.family === "unknown"
                 ? ["O Mercado Livre ainda não informou a família; confira em alguns minutos."]
                 : []),
@@ -304,7 +363,7 @@ export function DraftEditor({
             setMessage({
               tone: "signal",
               lines: [
-                `Anúncio publicado: ${result.externalId}, mas o Mercado Livre o colocou numa família separada.`,
+                `Publicado (${result.externalId}), mas o Mercado Livre não deixou tudo na mesma família.`,
                 "Isso acontece quando algum atributo principal (marca, modelo…) ficou diferente do original. Confira na edição do anúncio.",
               ],
             });
@@ -391,6 +450,32 @@ export function DraftEditor({
     });
   }
 
+  function uploadVariant(key: string, files: FileList) {
+    setUploadingVariant(key);
+    startTransition(async () => {
+      const added: CanonicalListing["pictures"] = [];
+      for (const file of [...files]) {
+        const form = new FormData();
+        form.append("file", await shrink(file), file.name.replace(/\.\w+$/, ".jpg"));
+        const result = await uploadVariantPictureAction(draftId, form);
+        if (result.status !== "ok") {
+          setMessage({
+            tone: "error",
+            lines: [FAILURES[result.status] ?? "Erro ao enviar a foto."],
+          });
+          break;
+        }
+        added.push(result.picture);
+      }
+      setRows((current) =>
+        current.map((row) =>
+          row.key === key ? { ...row, pictures: [...row.pictures, ...added].slice(0, 12) } : row,
+        ),
+      );
+      setUploadingVariant(null);
+    });
+  }
+
   function upload(files: FileList | null) {
     if (!files?.length) return;
     startTransition(async () => {
@@ -472,6 +557,52 @@ export function DraftEditor({
             onChange={(event) => setCondition(event.target.value as "new" | "used")}
           />
         </FormSection>
+
+        {model === "user_products" ? (
+          <section className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5">
+            <div className="flex flex-wrap items-center gap-4 text-sm">
+              <span className="font-display text-base font-semibold text-ink">Tipo</span>
+              <label className="flex items-center gap-1.5 text-ink">
+                <input
+                  type="radio"
+                  checked={kind === "simple"}
+                  disabled={anyPublished}
+                  onChange={() => setKind("simple")}
+                />
+                Simples
+              </label>
+              <label className="flex items-center gap-1.5 text-ink">
+                <input
+                  type="radio"
+                  checked={kind === "variants"}
+                  onChange={() => setKind("variants")}
+                />
+                Variantes
+              </label>
+              {kind === "variants" ? (
+                <span className="text-xs text-muted">
+                  Cada variante vira um anúncio da mesma família no Mercado Livre.
+                </span>
+              ) : null}
+            </div>
+            {kind === "variants" ? (
+              <VariantsEditor
+                definitions={definitions}
+                variationIds={variationIds}
+                onVariationIds={setVariationIds}
+                rows={rows}
+                onRows={setRows}
+                skuOptions={skuOptions}
+                published={published}
+                basePriceText={price}
+                disabled={!editable}
+                uploading={uploadingVariant}
+                onUpload={uploadVariant}
+                errors={errors}
+              />
+            ) : null}
+          </section>
+        ) : null}
 
         <section className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5">
           <h2 className="font-display text-base font-semibold text-ink">Categoria *</h2>
@@ -696,7 +827,8 @@ export function DraftEditor({
 
         <FormSection title="Preço e estoque">
           <Field
-            label="Preço (R$) *"
+            label={kind === "variants" ? "Preço padrão (R$)" : "Preço (R$) *"}
+            hint={kind === "variants" ? "Usado nas variantes sem preço próprio." : undefined}
             name="price"
             inputMode="decimal"
             value={price}
@@ -706,19 +838,21 @@ export function DraftEditor({
             }}
             error={errors.price}
           />
-          <Field
-            label="Quantidade inicial"
-            name="quantity"
-            inputMode="numeric"
-            value={quantity}
-            onChange={(event) => setQuantity(event.target.value)}
-            error={errors.quantity}
-            hint={
-              sku
-                ? `Estoque do SKU ${sku.code} no ERP: ${sku.stockOnHand}. Se a sincronização de estoque estiver ligada, o ERP ajusta depois de publicar.`
-                : undefined
-            }
-          />
+          {kind === "simple" ? (
+            <Field
+              label="Quantidade inicial"
+              name="quantity"
+              inputMode="numeric"
+              value={quantity}
+              onChange={(event) => setQuantity(event.target.value)}
+              error={errors.quantity}
+              hint={
+                sku
+                  ? `Estoque do SKU ${sku.code} no ERP: ${sku.stockOnHand}. Se a sincronização de estoque estiver ligada, o ERP ajusta depois de publicar.`
+                  : undefined
+              }
+            />
+          ) : null}
           <SelectField
             label="Tipo de anúncio"
             name="listingTypeId"

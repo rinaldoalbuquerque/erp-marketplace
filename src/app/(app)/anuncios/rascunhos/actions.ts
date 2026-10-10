@@ -17,6 +17,7 @@ import {
   quoteDraftFees,
   saveDraftContent,
   setDraftSku,
+  uploadVariantPicture,
   suggestDraftCategories,
   validateDraft,
   type CheckResult,
@@ -153,4 +154,13 @@ export async function setDraftSkuAction(draftId: string, formData: FormData) {
     await setDraftSku(ctx.tdb, draftId, id.safeParse(skuId).success ? skuId : null);
   }
   revalidatePath(`/anuncios/rascunhos/${draftId}`);
+}
+
+export async function uploadVariantPictureAction(draftId: string, formData: FormData) {
+  const { ctx } = await context();
+  const file = formData.get("file");
+  if (!id.safeParse(draftId).success || !(file instanceof Blob)) {
+    return { status: "invalid" } as const;
+  }
+  return uploadVariantPicture(ctx, draftId, file, file instanceof File ? file.name : "foto.jpg");
 }
