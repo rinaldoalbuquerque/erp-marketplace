@@ -55,6 +55,8 @@ function source(overrides: Partial<ListingForCopy> = {}): ListingForCopy {
     sellerId: "1",
     listingModel: "user_products",
     hasVariations: false,
+    variations: [],
+    familyId: null,
     permalink: null,
     title: "Pote Hermético 370ml",
     ...overrides,

@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { getCatalogProductForCopy, getListingForCopy } from "@/connectors/mercadolivre/copying";
+import {
+  getCatalogProductForCopy,
+  getFamily,
+  getListingForCopy,
+} from "@/connectors/mercadolivre/copying";
 import type { FetchFn } from "@/connectors/mercadolivre/http";
 import { toPublishBody } from "@/connectors/mercadolivre/publishing";
 
@@ -142,5 +146,87 @@ describe("getCatalogProductForCopy", () => {
   it("not a catalog product -> null", async () => {
     const fetchFn = fakeFetch(() => ({ status: 404, body: { error: "not_found" } }));
     expect(await getCatalogProductForCopy(fetchFn, "t", "MLB1")).toBeNull();
+  });
+});
+
+describe("variations and families", () => {
+  it("reads the variations of a traditional listing (combination, price, pictures, SKU)", async () => {
+    const traditional = {
+      id: "MLB777",
+      title: "Camiseta Básica",
+      category_id: "MLB31447",
+      price: 49,
+      status: "active",
+      pictures: [
+        { id: "P1", secure_url: "https://http2.mlstatic.com/P1.jpg" },
+        { id: "P2", secure_url: "https://http2.mlstatic.com/P2.jpg" },
+      ],
+      attributes: [{ id: "BRAND", value_name: "Marca X" }],
+      variations: [
+        {
+          id: 9001,
+          price: 49,
+          available_quantity: 3,
+          picture_ids: ["P2"],
+          attribute_combinations: [
+            { id: "COLOR", value_id: "52049", value_name: "Preto" },
+            { id: "SIZE", value_id: "1", value_name: "M" },
+          ],
+          attributes: [{ id: "SELLER_SKU", value_name: "CAM-PR-M" }],
+        },
+      ],
+    };
+    const fetchFn = fakeFetch((url) =>
+      url.pathname.endsWith("/description")
+        ? { status: 404, body: {} }
+        : { status: 200, body: traditional },
+    );
+    const copy = await getListingForCopy(fetchFn, "t", "MLB777");
+    expect(copy.hasVariations).toBe(true);
+    expect(copy.familyId).toBeNull();
+    expect(copy.variations).toEqual([
+      {
+        externalId: "9001",
+        attributes: [
+          { id: "COLOR", valueId: "52049", valueName: "Preto" },
+          { id: "SIZE", valueId: "1", valueName: "M" },
+        ],
+        priceCents: 4900,
+        availableQuantity: 3,
+        pictures: [{ id: "P2", url: "https://http2.mlstatic.com/P2.jpg" }],
+        sellerSku: "CAM-PR-M",
+      },
+    ]);
+  });
+
+  it("reads a User Products family: varying and shared attributes", async () => {
+    const fetchFn = fakeFetch(() => ({
+      status: 200,
+      body: {
+        family_id: 1034108706118545,
+        family_name: "Boné Esportivo Dry Fit",
+        attributes: [
+          { id: "BRAND", hierarchy: "PARENT_PK" },
+          { id: "MODEL", hierarchy: "PARENT_PK" },
+        ],
+        child_attributes_ids: ["COLOR", "SIZE"],
+      },
+    }));
+    expect(await getFamily(fetchFn, "t", "1034108706118545")).toEqual({
+      familyId: "1034108706118545",
+      familyName: "Boné Esportivo Dry Fit",
+      childAttributeIds: ["COLOR", "SIZE"],
+      parentAttributeIds: ["BRAND", "MODEL"],
+    });
+    expect(new URL(String(fetchFn.mock.calls[0]?.[0])).pathname).toBe(
+      "/user-products-families/1034108706118545",
+    );
+    expect(
+      await getFamily(
+        fakeFetch(() => ({ status: 404, body: {} })),
+        "t",
+        "1",
+      ),
+    ).toBeNull();
   });
 });

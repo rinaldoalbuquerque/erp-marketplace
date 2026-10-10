@@ -40,6 +40,8 @@ function source(id: string, hasVariations = false): ListingForCopy {
     sellerId: "2",
     listingModel: "user_products",
     hasVariations,
+    variations: [],
+    familyId: null,
     permalink: null,
     title: `Produto ${id}`,
   };

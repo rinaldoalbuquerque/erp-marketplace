@@ -150,10 +150,35 @@ export type ListingForCopy = {
   /** Seller of the source listing (to know whether picture ids can be reused). */
   sellerId: string | null;
   listingModel: ListingModel;
-  /** Traditional listing with variations (not copied yet in 2D). */
+  /** Traditional listing with variations (each one becomes its own draft). */
   hasVariations: boolean;
+  /** Variations of a traditional listing (empty otherwise). */
+  variations: CopyVariation[];
+  /** User Products family of the source (null for traditional listings). */
+  familyId: string | null;
   permalink: string | null;
   title: string;
+};
+
+/** One variation of a traditional listing, ready to become a User Products listing. */
+export type CopyVariation = {
+  externalId: string;
+  /** The variation's combination (e.g. COLOR = Azul, SIZE = M). */
+  attributes: AttributeValue[];
+  priceCents: number | null;
+  availableQuantity: number;
+  pictures: Array<{ id: string | null; url: string | null }>;
+  sellerSku: string | null;
+};
+
+/** User Products family: what is shared and what varies among its listings. */
+export type ListingFamily = {
+  familyId: string;
+  familyName: string;
+  /** Attributes that vary inside the family (ML CHILD_PK), e.g. COLOR, SIZE. */
+  childAttributeIds: string[];
+  /** Attributes every member shares (ML PARENT_PK), e.g. BRAND, MODEL. */
+  parentAttributeIds: string[];
 };
 
 export interface MarketplaceConnector {
@@ -189,6 +214,8 @@ export interface MarketplaceConnector {
 
   // Copy / migrate / replicate (Phase 2D)
   getListingForCopy(accessToken: string, externalId: string): Promise<ListingForCopy>;
+  /** User Products family (shared and varying attributes); null when not found. */
+  getFamily(accessToken: string, familyId: string): Promise<ListingFamily | null>;
   /** A catalog product (page /p/...) as a listing to copy; null when it is not one. */
   getCatalogProductForCopy(accessToken: string, productId: string): Promise<ListingForCopy | null>;
 

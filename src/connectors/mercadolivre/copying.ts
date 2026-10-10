@@ -2,9 +2,10 @@ import { z } from "zod";
 
 import { emptyListing, type CanonicalListing } from "@/domain/listings/canonical";
 
-import type { ListingForCopy } from "../types";
+import type { ListingFamily, ListingForCopy } from "../types";
 import { failure, getListingForEdit } from "./editing";
 import { ML_API_BASE, mlFetch, type FetchFn } from "./http";
+import { toCents } from "./items";
 
 // Reading any listing (own or another seller's) into the canonical model, for
 // copy / migrate / replicate (Phase 2D).
@@ -30,6 +31,35 @@ const rawSchema = z
       .nullish(),
     sale_terms: z
       .array(z.object({ id: z.string(), value_name: z.string().nullish() }).passthrough())
+      .nullish(),
+    // Traditional variations: attribute_combinations, price, picture_ids, SKU
+    // (https://developers.mercadolivre.com.br/pt_br/publicacao-de-produtos, variations).
+    variations: z
+      .array(
+        z
+          .object({
+            id: z.union([z.number(), z.string()]).transform(String),
+            price: z.number().nullish(),
+            available_quantity: z.number().nullish(),
+            picture_ids: z.array(z.string()).nullish(),
+            seller_custom_field: z.string().nullish(),
+            attribute_combinations: z
+              .array(
+                z
+                  .object({
+                    id: z.string(),
+                    value_id: z.string().nullish(),
+                    value_name: z.string().nullish(),
+                  })
+                  .passthrough(),
+              )
+              .nullish(),
+            attributes: z
+              .array(z.object({ id: z.string(), value_name: z.string().nullish() }).passthrough())
+              .nullish(),
+          })
+          .passthrough(),
+      )
       .nullish(),
   })
   .passthrough();
@@ -73,11 +103,31 @@ export async function getListingForCopy(
     attributes,
     warranty: { type: term("WARRANTY_TYPE"), time: term("WARRANTY_TIME") },
   };
+  const pictureUrl = new Map(
+    (raw.pictures ?? []).map((picture) => [picture.id, picture.secure_url ?? picture.url ?? null]),
+  );
+  const variations = (raw.variations ?? []).map((variation) => ({
+    externalId: variation.id,
+    attributes: (variation.attribute_combinations ?? []).map((combination) => ({
+      id: combination.id,
+      valueId: combination.value_id ?? null,
+      valueName: combination.value_name ?? null,
+    })),
+    priceCents: toCents(variation.price),
+    availableQuantity: Math.max(0, variation.available_quantity ?? 0),
+    pictures: (variation.picture_ids ?? []).map((id) => ({ id, url: pictureUrl.get(id) ?? null })),
+    sellerSku:
+      variation.attributes?.find((attribute) => attribute.id === "SELLER_SKU")?.value_name ??
+      variation.seller_custom_field ??
+      null,
+  }));
   return {
     listing: canonical,
     sellerId: raw.seller_id ?? null,
     listingModel: listing.listingModel,
-    hasVariations: listing.variations.length > 0,
+    hasVariations: variations.length > 0,
+    variations,
+    familyId: listing.familyId,
     permalink: listing.permalink,
     title: listing.title,
   };
@@ -177,7 +227,47 @@ export async function getCatalogProductForCopy(
     sellerId: null,
     listingModel: "unknown",
     hasVariations: false,
+    variations: [],
+    familyId: null,
     permalink: product.permalink ?? null,
     title: name,
+  };
+}
+
+// User Products family: GET /user-products-families/{family_id}
+// -> family_name, attributes[] with hierarchy PARENT_PK, child_attributes_ids
+// (https://developers.mercadolivre.com.br/pt_br/preco-variacao, "Obter Família").
+const familySchema = z
+  .object({
+    family_id: z.union([z.number(), z.string()]).transform(String),
+    family_name: z.string().nullish(),
+    attributes: z
+      .array(z.object({ id: z.string(), hierarchy: z.string().nullish() }).passthrough())
+      .nullish(),
+    child_attributes_ids: z.array(z.string()).nullish(),
+  })
+  .passthrough();
+
+export async function getFamily(
+  fetchFn: FetchFn,
+  accessToken: string,
+  familyId: string,
+): Promise<ListingFamily | null> {
+  const response = await mlFetch(
+    fetchFn,
+    `${ML_API_BASE}/user-products-families/${encodeURIComponent(familyId)}`,
+    { headers: { authorization: `Bearer ${accessToken}` } },
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) await failure(response, "Family");
+  const parsed = familySchema.safeParse(await response.json());
+  if (!parsed.success) return null;
+  return {
+    familyId: parsed.data.family_id,
+    familyName: parsed.data.family_name ?? "",
+    childAttributeIds: parsed.data.child_attributes_ids ?? [],
+    parentAttributeIds: (parsed.data.attributes ?? [])
+      .filter((attribute) => attribute.hierarchy === "PARENT_PK")
+      .map((attribute) => attribute.id),
   };
 }
