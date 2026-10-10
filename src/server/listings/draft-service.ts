@@ -120,6 +120,7 @@ export async function loadDraft(tdb: TenantDb, draftId: string) {
       updatedAt: true,
       sourceKind: true,
       sourceExternalId: true,
+      targetFamilyId: true,
       account: {
         select: {
           id: true,
@@ -323,7 +324,14 @@ export async function validateDraft(
 }
 
 export type PublishResult =
-  | { status: "published"; listingId: string; externalId: string; descriptionFailed: boolean }
+  | {
+      status: "published";
+      listingId: string;
+      externalId: string;
+      descriptionFailed: boolean;
+      /** "Nova variação": did the marketplace put it in the expected family? */
+      family: "same" | "different" | "unknown" | null;
+    }
   | { status: "incomplete"; missing: string[] }
   | { status: "refused"; errors: string[] }
   | { status: "unconfirmed" }
@@ -428,6 +436,13 @@ export async function publishDraft(
     listingId: local?.id ?? "",
     externalId: created.externalId,
     descriptionFailed,
+    family: !draft.targetFamilyId
+      ? null
+      : !created.familyId
+        ? "unknown"
+        : created.familyId === draft.targetFamilyId
+          ? "same"
+          : "different",
   };
 }
 

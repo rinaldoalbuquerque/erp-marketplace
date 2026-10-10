@@ -234,4 +234,20 @@ describe("listing drafts against the database", () => {
       "999-MLB_2",
     ]);
   });
+
+  it("new variation: tells whether the marketplace kept it in the family", async () => {
+    for (const [familyId, expected] of [
+      ["1", "same"],
+      ["999", "different"],
+    ] as const) {
+      const draftId = await readyDraft();
+      await db.listingDraft.update({ where: { id: draftId }, data: { targetFamilyId: familyId } });
+      const connector = fakeConnector({
+        publishListing: async () => created(`MLB${Date.now()}${familyId}`), // familyId "1"
+        updateListingDescription: async () => undefined,
+      });
+      const result = await publishDraft(ctx(), draftId, { key, connectorFor: () => connector });
+      expect(result).toMatchObject({ status: "published", family: expected });
+    }
+  });
 });
