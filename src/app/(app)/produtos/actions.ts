@@ -9,6 +9,7 @@ import { GENERIC_ERROR } from "@/lib/auth/error-messages";
 import { type FormState } from "@/lib/auth/form-state";
 import { fieldErrors } from "@/lib/auth/schemas";
 import { requirePermission, type CurrentMember } from "@/server/auth/session";
+import { deleteProducts, type DeleteProductsResult } from "@/server/products/delete-service";
 import { adjustStock } from "@/server/stock/stock-service";
 import { getTenantContext, type TenantDb } from "@/server/tenant/tenant-db";
 
@@ -173,6 +174,17 @@ export async function updateProductAction(
   revalidatePath("/produtos");
   revalidatePath(`/produtos/${productId}`);
   return { status: "success", message: "Produto salvo.", values: raw };
+}
+
+/** Deletes products (those with history are archived instead). Owner/admin only. */
+export async function deleteProductsAction(productIds: string[]): Promise<DeleteProductsResult> {
+  const member = await requirePermission("products.archive");
+  const { tdb } = await getTenantContext(member);
+  const uuid = /^[0-9a-f-]{36}$/i;
+  const result = await deleteProducts(tdb, productIds.filter((id) => uuid.test(id)).slice(0, 200));
+  revalidatePath("/produtos");
+  revalidatePath("/anuncios");
+  return result;
 }
 
 export async function setProductArchivedAction(productId: string, archived: boolean) {

@@ -10,6 +10,9 @@ import { requirePermission } from "@/server/auth/session";
 import { listProducts } from "@/server/products/queries";
 import { getTenantContext } from "@/server/tenant/tenant-db";
 
+import { resultFromQuery, resultText } from "./delete-result";
+import { DeleteProductButton, PRODUCT_FORM_ID, ProductDeleteBar } from "./product-delete";
+
 export const metadata: Metadata = { title: "Produtos" };
 
 export default function ProductsPage({ searchParams }: PageProps<"/produtos">) {
@@ -42,6 +45,9 @@ async function ProductList({ searchParams }: Pick<PageProps<"/produtos">, "searc
     const text = query.toString();
     return text ? `/produtos?${text}` : "/produtos";
   };
+
+  const canDelete = can(member.role, "products.archive");
+  const deleteResult = resultFromQuery(params);
 
   return (
     <>
@@ -95,6 +101,21 @@ async function ProductList({ searchParams }: Pick<PageProps<"/produtos">, "searc
         </button>
       </form>
 
+      {deleteResult ? (
+        <p
+          role="status"
+          className={`mb-4 rounded-lg border-l-4 px-3 py-2 text-sm ${
+            deleteResult.archived || deleteResult.failed
+              ? "border-signal bg-signal-soft text-signal-ink"
+              : "border-success bg-success-soft text-success"
+          }`}
+        >
+          {resultText(deleteResult)}
+        </p>
+      ) : null}
+
+      {canDelete && products.length > 0 ? <ProductDeleteBar /> : null}
+
       {products.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-surface p-10 text-center">
           <p className="font-display text-lg font-semibold text-ink">
@@ -111,10 +132,20 @@ async function ProductList({ searchParams }: Pick<PageProps<"/produtos">, "searc
           <table className="w-full text-sm">
             <thead className="border-b border-border text-left text-muted">
               <tr>
+                {canDelete ? (
+                  <th className="w-10 px-4 py-3">
+                    <span className="sr-only">Marcar</span>
+                  </th>
+                ) : null}
                 <th className="px-4 py-3 font-medium">Produto</th>
                 <th className="px-4 py-3 font-medium">SKUs</th>
                 <th className="px-4 py-3 text-right font-medium">Estoque</th>
                 <th className="px-4 py-3 font-medium">Fiscal</th>
+                {canDelete ? (
+                  <th className="w-10 px-4 py-3">
+                    <span className="sr-only">Excluir</span>
+                  </th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -125,6 +156,18 @@ async function ProductList({ searchParams }: Pick<PageProps<"/produtos">, "searc
                 ).length;
                 return (
                   <tr key={product.id} className="border-b border-border last:border-0">
+                    {canDelete ? (
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          name="productId"
+                          value={product.id}
+                          form={PRODUCT_FORM_ID}
+                          aria-label={`Marcar ${product.name}`}
+                          className="size-4 accent-brand"
+                        />
+                      </td>
+                    ) : null}
                     <td className="px-4 py-3">
                       <Link
                         href={`/produtos/${product.id}`}
@@ -157,6 +200,11 @@ async function ProductList({ searchParams }: Pick<PageProps<"/produtos">, "searc
                         <span className="text-xs text-success">Completo</span>
                       )}
                     </td>
+                    {canDelete ? (
+                      <td className="px-4 py-3">
+                        <DeleteProductButton productId={product.id} name={product.name} />
+                      </td>
+                    ) : null}
                   </tr>
                 );
               })}

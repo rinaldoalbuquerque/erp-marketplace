@@ -14,6 +14,7 @@ import { getProductWithSkus } from "@/server/products/queries";
 import { getTenantContext } from "@/server/tenant/tenant-db";
 
 import { setProductArchivedAction, updateProductAction } from "../actions";
+import { DeleteProductButton } from "../product-delete";
 import { EditProductForm } from "../product-forms";
 
 export const metadata: Metadata = { title: "Produto" };
@@ -54,19 +55,22 @@ async function ProductDetail({
         back={{ href: "/produtos", label: "Produtos" }}
         actions={
           canArchive ? (
-            <form action={setProductArchivedAction.bind(null, product.id, !archived)}>
-              <button
-                type="submit"
-                className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-2"
-              >
-                {archived ? (
-                  <ArchiveRestore className="size-4" aria-hidden="true" />
-                ) : (
-                  <Archive className="size-4" aria-hidden="true" />
-                )}
-                {archived ? "Reativar" : "Arquivar"}
-              </button>
-            </form>
+            <div className="flex flex-wrap gap-2">
+              <DeleteProductButton productId={product.id} name={product.name} label="Excluir" />
+              <form action={setProductArchivedAction.bind(null, product.id, !archived)}>
+                <button
+                  type="submit"
+                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-2"
+                >
+                  {archived ? (
+                    <ArchiveRestore className="size-4" aria-hidden="true" />
+                  ) : (
+                    <Archive className="size-4" aria-hidden="true" />
+                  )}
+                  {archived ? "Reativar" : "Arquivar"}
+                </button>
+              </form>
+            </div>
           ) : null
         }
       />
