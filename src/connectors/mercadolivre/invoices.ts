@@ -71,7 +71,7 @@ const invoiceSchema = z
 
 /**
  * The docs show dates without a time zone ("2020-03-06T17:52:05.269"); they are
- * read as Brasília time (-03:00). TO CONFIRM against the ML panel on a real invoice.
+ * read as São Paulo time (-03:00; confirmed by the owner on 2026-10-10, Brazil has no DST).
  */
 function mlDate(value: string | null | undefined): Date | null {
   if (!value) return null;
