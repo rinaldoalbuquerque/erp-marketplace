@@ -175,8 +175,8 @@ export async function saveFamilyAction(
   return { status: "done", members, created };
 }
 
-/** Picture of a new variant, uploaded with the account of the listing. */
-export async function uploadFamilyPictureAction(listingId: string, formData: FormData) {
+/** Picture uploaded with the account of the listing (new variant or replaced pictures). */
+export async function uploadListingPictureAction(listingId: string, formData: FormData) {
   const member = await requirePermission("listings.edit");
   const file = formData.get("file");
   if (!z.uuid().safeParse(listingId).success || !(file instanceof Blob)) {

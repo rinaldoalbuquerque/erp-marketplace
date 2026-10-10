@@ -147,6 +147,8 @@ async function EditListing({
     description: editable.description ?? "",
     attributes: attributeInputs,
     readOnlyValues,
+    listingTypeId: listing.listingTypeId,
+    pictures: editable.pictures ?? [],
   };
 
   const history = await tdb.listingEdit.findMany({

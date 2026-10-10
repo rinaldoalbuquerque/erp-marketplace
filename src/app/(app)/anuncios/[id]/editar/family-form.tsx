@@ -22,7 +22,7 @@ import { parseBrlToCents } from "@/domain/products/money";
 
 import {
   saveFamilyAction,
-  uploadFamilyPictureAction,
+  uploadListingPictureAction,
   type FamilyInput,
   type SaveFamilyResult,
 } from "./actions";
@@ -302,7 +302,7 @@ export function FamilyEditForm({
       for (const file of [...files]) {
         const form = new FormData();
         form.append("file", await shrinkImage(file), file.name.replace(/\.\w+$/, ".jpg"));
-        const result = await uploadFamilyPictureAction(listingId, form);
+        const result = await uploadListingPictureAction(listingId, form);
         if (result.status !== "ok") {
           setMessage({
             tone: "error",

@@ -1,6 +1,6 @@
 "use client";
 
-import { Save } from "lucide-react";
+import { ArrowLeft, ArrowRight, ImagePlus, Save, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
@@ -8,13 +8,15 @@ import { Field } from "@/components/ui/form";
 import { FormSection, SelectField, TextareaField } from "@/components/ui/fields";
 import type { EditableListing } from "@/connectors/types";
 import { AttributeField } from "@/components/listings/attribute-field";
+import { shrinkImage } from "@/components/listings/shrink-image";
 import {
   sortForForm,
   type AttributeDefinition,
   type AttributeInput,
 } from "@/domain/listings/attributes";
+import { LISTING_TYPES } from "@/domain/listings/canonical";
 
-import { saveListingEditAction, type EditPayload } from "./actions";
+import { saveListingEditAction, uploadListingPictureAction, type EditPayload } from "./actions";
 
 export type EditFormInitial = {
   versionStamp: string | null;
@@ -26,6 +28,9 @@ export type EditFormInitial = {
   attributes: Record<string, AttributeInput>;
   /** Display values of read-only attributes. */
   readOnlyValues: Record<string, string>;
+  listingTypeId: string | null;
+  /** Current pictures in order (the first is the main one). */
+  pictures: Array<{ id: string; url: string | null }>;
 };
 
 const STATUS_OPTIONS = [
@@ -59,6 +64,9 @@ export function EditListingForm({
   const [status, setStatus] = useState(initial.status);
   const [description, setDescription] = useState(initial.description);
   const [attributes, setAttributes] = useState(initial.attributes);
+  const [listingTypeId, setListingTypeId] = useState(initial.listingTypeId ?? "");
+  const [pictures, setPictures] = useState(initial.pictures);
+  const [uploading, setUploading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<Message | null>(null);
   const [pending, startTransition] = useTransition();
@@ -100,6 +108,15 @@ export function EditListingForm({
       ...(rules.titleEditable ? { title } : {}),
       ...(rules.familyNameEditable ? { familyName } : {}),
       ...(status === "active" || status === "paused" || status === "closed" ? { status } : {}),
+      // Pictures: the full ordered list, only when something changed.
+      ...(pictures.map((picture) => picture.id).join("|") !==
+      initial.pictures.map((picture) => picture.id).join("|")
+        ? { pictureIds: pictures.map((picture) => picture.id) }
+        : {}),
+      ...(listingTypeId !== (initial.listingTypeId ?? "") &&
+      (listingTypeId === "gold_special" || listingTypeId === "gold_pro")
+        ? { listingTypeId }
+        : {}),
     };
     startTransition(async () => {
       const result = await saveListingEditAction(listingId, payload);
@@ -176,6 +193,41 @@ export function EditListingForm({
     });
   }
 
+  function upload(files: FileList) {
+    setUploading(true);
+    startTransition(async () => {
+      const added: typeof pictures = [];
+      for (const file of [...files]) {
+        const form = new FormData();
+        form.append("file", await shrinkImage(file), file.name.replace(/\.\w+$/, ".jpg"));
+        const result = await uploadListingPictureAction(listingId, form);
+        if (result.status !== "ok") {
+          setMessage({
+            tone: "error",
+            lines: [
+              result.status === "invalid"
+                ? "Arquivo inválido (use JPG ou PNG de até 10 MB)."
+                : "Não foi possível enviar a foto ao Mercado Livre.",
+            ],
+          });
+          break;
+        }
+        added.push(result.picture);
+      }
+      setPictures((current) => [...current, ...added].slice(0, 12));
+      setUploading(false);
+    });
+  }
+
+  function movePicture(index: number, delta: number) {
+    setPictures((current) => {
+      const next = [...current];
+      const [item] = next.splice(index, 1);
+      next.splice(Math.max(0, Math.min(next.length, index + delta)), 0, item!);
+      return next;
+    });
+  }
+
   const setAttribute = (id: string, next: AttributeInput) =>
     setAttributes((current) => ({ ...current, [id]: next }));
 
@@ -234,7 +286,91 @@ export function EditListingForm({
           value={status}
           onChange={(event) => setStatus(event.target.value)}
         />
+        <SelectField
+          label="Tipo de anúncio"
+          name="listingTypeId"
+          options={[
+            ...(listingTypeId && !(listingTypeId in LISTING_TYPES)
+              ? [{ value: listingTypeId, label: listingTypeId }]
+              : []),
+            ...Object.entries(LISTING_TYPES).map(([value, label]) => ({ value, label })),
+          ]}
+          value={listingTypeId}
+          onChange={(event) => setListingTypeId(event.target.value)}
+        />
       </FormSection>
+
+      <section className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-display text-base font-semibold text-ink">
+            Fotos <span className="font-normal text-muted">({pictures.length}/12)</span>
+          </h2>
+          <label className="inline-flex cursor-pointer items-center gap-1 text-sm text-brand hover:underline">
+            <ImagePlus className="size-4" aria-hidden="true" />
+            Adicionar imagens
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              className="sr-only"
+              disabled={uploading}
+              onChange={(event) => {
+                if (event.target.files?.length) upload(event.target.files);
+                event.target.value = "";
+              }}
+            />
+          </label>
+        </div>
+        <p className="text-xs text-muted">
+          A primeira foto é a principal. Ao salvar, as fotos do anúncio são substituídas por esta
+          lista, nesta ordem.
+        </p>
+        {uploading ? <span className="text-xs text-muted">Enviando ao Mercado Livre…</span> : null}
+        {errors.pictures ? <p className="text-sm text-danger">{errors.pictures}</p> : null}
+        <ul className="flex flex-wrap gap-2">
+          {pictures.map((picture, position) => (
+            <li key={`${picture.id}-${position}`} className="flex w-24 flex-col items-center gap-1">
+              <div className="flex size-24 items-center justify-center overflow-hidden rounded-lg border border-border bg-white">
+                {picture.url ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- ML-hosted preview
+                  <img src={picture.url} alt="" className="max-h-full object-contain" />
+                ) : (
+                  <span className="px-1 text-center text-[10px] text-muted">{picture.id}</span>
+                )}
+              </div>
+              <span className="flex gap-1 text-muted">
+                <button
+                  type="button"
+                  aria-label="Mover para a esquerda"
+                  onClick={() => movePicture(position, -1)}
+                  className="hover:text-ink"
+                >
+                  <ArrowLeft className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Mover para a direita"
+                  onClick={() => movePicture(position, 1)}
+                  className="hover:text-ink"
+                >
+                  <ArrowRight className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Remover foto"
+                  onClick={() =>
+                    setPictures((current) => current.filter((_, item) => item !== position))
+                  }
+                  className="hover:text-danger"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </span>
+              {position === 0 ? <span className="text-[10px] text-muted">principal</span> : null}
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <section className="rounded-xl border border-border bg-surface p-5">
         <TextareaField
