@@ -14,6 +14,7 @@ import {
   canonicalListingSchema,
   emptyVariant,
   type CanonicalListing,
+  type CanonicalVariant,
   type ListingTypeId,
 } from "@/domain/listings/canonical";
 import { adjustPrice, type PriceOptions } from "@/domain/listings/copying";
@@ -348,6 +349,8 @@ export async function createVariationDraft(
   ctx: Ctx,
   listingId: string,
   deps: CopyDeps = {},
+  /** Family edit panel: the new variants, already filled (else one empty variation). */
+  variants?: CanonicalVariant[],
 ): Promise<VariationResult> {
   const listing = await ctx.tdb.listing.findFirst({
     where: { id: listingId },
@@ -382,6 +385,9 @@ export async function createVariationDraft(
           (!accepted || accepted.has(attribute.id)),
       ),
       availableQuantity: 0,
+      ...(variants?.length
+        ? { variationAttributeIds: [...varying], variants, priceCents: null }
+        : {}),
     };
     const draft = await ctx.tdb.listingDraft.create({
       data: {
