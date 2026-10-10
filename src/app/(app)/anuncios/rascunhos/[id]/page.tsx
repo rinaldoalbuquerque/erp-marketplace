@@ -23,18 +23,28 @@ const STATUS_LABELS = {
   failed: "Recusado na última tentativa",
 } as const;
 
-export default function DraftPage({ params }: PageProps<"/anuncios/rascunhos/[id]">) {
+export default function DraftPage({ params, searchParams }: PageProps<"/anuncios/rascunhos/[id]">) {
   return (
     <Suspense fallback={<p className="text-sm text-muted">Carregando…</p>}>
-      <Draft params={params} />
+      <Draft params={params} searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function Draft({ params }: Pick<PageProps<"/anuncios/rascunhos/[id]">, "params">) {
+const CODE = /^MLBd{6,15}$/;
+
+async function Draft({
+  params,
+  searchParams,
+}: Pick<PageProps<"/anuncios/rascunhos/[id]">, "params" | "searchParams">) {
   const member = await requirePermission("listings.edit");
   const { tdb } = await getTenantContext(member);
   const { id } = await params;
+  const query = await searchParams;
+  const catalog =
+    typeof query.catalogo === "string" && CODE.test(query.catalogo) ? query.catalogo : null;
+  const copied =
+    typeof query.anuncio === "string" && CODE.test(query.anuncio) ? query.anuncio : null;
   if (!z.uuid().safeParse(id).success) notFound();
   const draft = await loadDraft(tdb, id);
   if (!draft) notFound();
@@ -94,6 +104,15 @@ async function Draft({ params }: Pick<PageProps<"/anuncios/rascunhos/[id]">, "pa
               Abrir a edição do anúncio
             </Link>
           ) : null}
+        </p>
+      ) : null}
+      {catalog && copied ? (
+        <p
+          role="status"
+          className="mb-5 rounded-lg border-l-4 border-success bg-success-soft px-3 py-2 text-sm text-success"
+        >
+          {catalog} é um produto de catálogo (página com vários vendedores), não um anúncio. Foi
+          copiado o anúncio {copied}, de um dos vendedores dessa página.
         </p>
       ) : null}
       {draft.sourceKind === "external" && draft.editable ? (

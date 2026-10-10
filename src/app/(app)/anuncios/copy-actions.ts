@@ -104,5 +104,9 @@ export async function copyOneAction(formData: FormData) {
   if (result.status !== "created") {
     redirect(`/anuncios/copiar?erro=${result.status}&ref=${encodeURIComponent(ref)}`);
   }
-  redirect(`/anuncios/rascunhos/${result.draftId}`);
+  redirect(
+    result.catalogProductId
+      ? `/anuncios/rascunhos/${result.draftId}?catalogo=${result.catalogProductId}&anuncio=${result.copiedExternalId}`
+      : `/anuncios/rascunhos/${result.draftId}`,
+  );
 }

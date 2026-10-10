@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { getListingForCopy } from "@/connectors/mercadolivre/copying";
+import { getListingForCopy, resolveCatalogProduct } from "@/connectors/mercadolivre/copying";
 import type { FetchFn } from "@/connectors/mercadolivre/http";
 import { toPublishBody } from "@/connectors/mercadolivre/publishing";
 
@@ -92,5 +92,30 @@ describe("getListingForCopy", () => {
       { source: "https://http2.mlstatic.com/D_111-O.jpg" },
       { id: "333-MLB1_01" },
     ]);
+  });
+});
+
+describe("resolveCatalogProduct", () => {
+  it("uses the buy box winner of a catalog product", async () => {
+    const fetchFn = fakeFetch(() => ({
+      status: 200,
+      body: { id: "MLB39565808", buy_box_winner: { item_id: "MLB111" } },
+    }));
+    expect(await resolveCatalogProduct(fetchFn, "t", "MLB39565808")).toBe("MLB111");
+    expect(new URL(String(fetchFn.mock.calls[0]?.[0])).pathname).toBe("/products/MLB39565808");
+  });
+
+  it("without a winner, takes the first listing of the product", async () => {
+    const fetchFn = fakeFetch((url) =>
+      url.pathname.endsWith("/items")
+        ? { status: 200, body: { results: [{ item_id: "MLB5429219232" }], paging: { total: 5 } } }
+        : { status: 200, body: { id: "MLB39565808", buy_box_winner: null } },
+    );
+    expect(await resolveCatalogProduct(fetchFn, "t", "MLB39565808")).toBe("MLB5429219232");
+  });
+
+  it("not a catalog product -> null", async () => {
+    const fetchFn = fakeFetch(() => ({ status: 404, body: { error: "not_found" } }));
+    expect(await resolveCatalogProduct(fetchFn, "t", "MLB1")).toBeNull();
   });
 });

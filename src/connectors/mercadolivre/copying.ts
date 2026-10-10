@@ -3,8 +3,8 @@ import { z } from "zod";
 import { emptyListing, type CanonicalListing } from "@/domain/listings/canonical";
 
 import type { ListingForCopy } from "../types";
-import { getListingForEdit } from "./editing";
-import type { FetchFn } from "./http";
+import { failure, getListingForEdit } from "./editing";
+import { ML_API_BASE, mlFetch, type FetchFn } from "./http";
 
 // Reading any listing (own or another seller's) into the canonical model, for
 // copy / migrate / replicate (Phase 2D).
@@ -81,4 +81,40 @@ export async function getListingForCopy(
     permalink: listing.permalink,
     title: listing.title,
   };
+}
+
+// Catalog products (pages /p/MLB...) are not listings: GET /items answers 404.
+// - GET /products/{id}: documented; buy_box_winner = listing winning the page
+//   https://developers.mercadolivre.com.br/pt_br/buscador-de-produtos
+//   https://developers.mercadolivre.com.br/pt_br/concorrencia-em-catalogo
+// - GET /products/{id}/items: NOT found in the docs pages read; seen working on
+//   2026-10-10 (results[].item_id of the sellers on the page). Used only when
+//   the product has no buy box winner.
+const productSchema = z
+  .object({
+    buy_box_winner: z.object({ item_id: z.string().nullish() }).passthrough().nullish(),
+  })
+  .passthrough();
+const productItemsSchema = z
+  .object({ results: z.array(z.object({ item_id: z.string() }).passthrough()).default([]) })
+  .passthrough();
+
+/** Listing to copy for a catalog product id; null when it is not a catalog product. */
+export async function resolveCatalogProduct(
+  fetchFn: FetchFn,
+  accessToken: string,
+  productId: string,
+): Promise<string | null> {
+  const id = encodeURIComponent(productId);
+  const headers = { authorization: `Bearer ${accessToken}` };
+  const product = await mlFetch(fetchFn, `${ML_API_BASE}/products/${id}`, { headers });
+  if (product.status === 404) return null;
+  if (!product.ok) await failure(product, "Catalog product");
+  const winner = productSchema.catch({}).parse(await product.json()).buy_box_winner?.item_id;
+  if (winner) return winner;
+  const items = await mlFetch(fetchFn, `${ML_API_BASE}/products/${id}/items`, { headers });
+  if (!items.ok) return null;
+  return (
+    productItemsSchema.catch({ results: [] }).parse(await items.json()).results[0]?.item_id ?? null
+  );
 }

@@ -218,4 +218,31 @@ describe("copy listings against the database", () => {
       ),
     ).toEqual({ status: "not_found" });
   });
+
+  it("a catalog product id copies one of its listings", async () => {
+    const reads: string[] = [];
+    const catalog = fakeConnector({
+      getListingForCopy: async (_token, id) => {
+        reads.push(id);
+        if (id === "MLB39565808") throw new MarketplaceValidationError(["Item not found"]);
+        return source();
+      },
+      resolveCatalogProduct: async () => "MLB5429219232",
+    });
+    const result = await copyToDraft(
+      ctx(),
+      { sourceExternalId: "MLB39565808", targetAccountId },
+      { key, connectorFor: () => catalog },
+    );
+    expect(result).toMatchObject({
+      status: "created",
+      catalogProductId: "MLB39565808",
+      copiedExternalId: "MLB5429219232",
+    });
+    expect(reads).toEqual(["MLB39565808", "MLB5429219232"]);
+    const row = await db.listingDraft.findUniqueOrThrow({
+      where: { id: result.status === "created" ? result.draftId : "" },
+    });
+    expect(row.sourceExternalId).toBe("MLB5429219232");
+  });
 });

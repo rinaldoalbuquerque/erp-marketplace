@@ -42,7 +42,13 @@ export type CopyOptions = {
 };
 
 export type CopyResult =
-  | { status: "created"; draftId: string }
+  | {
+      status: "created";
+      draftId: string;
+      /** The pasted id was a catalog product; this listing of it was copied. */
+      catalogProductId: string | null;
+      copiedExternalId: string;
+    }
   | {
       status:
         | "duplicate"
@@ -96,7 +102,23 @@ export async function copyToDraft(
       own?.marketplaceAccountId ?? target.id,
       deps,
     );
-    const source = await connector.getListingForCopy(readToken, input.sourceExternalId);
+    // Not a listing? It may be a catalog product (page /p/MLB...): copy one of its listings.
+    let sourceExternalId = input.sourceExternalId;
+    let catalogProductId: string | null = null;
+    let source;
+    try {
+      source = await connector.getListingForCopy(readToken, sourceExternalId);
+    } catch (error) {
+      const notFound =
+        error instanceof MarketplaceValidationError ||
+        (error instanceof MarketplaceApiError && error.status === 404);
+      if (!notFound) throw error;
+      const listingOfProduct = await connector.resolveCatalogProduct(readToken, sourceExternalId);
+      if (!listingOfProduct) return { status: "not_found" };
+      catalogProductId = sourceExternalId;
+      sourceExternalId = listingOfProduct;
+      source = await connector.getListingForCopy(readToken, sourceExternalId);
+    }
     if (source.hasVariations) return { status: "has_variations" };
 
     const targetToken =
@@ -140,14 +162,19 @@ export async function copyToDraft(
           skuId: sku?.id ?? null,
           content,
           sourceKind: own ? "own" : "external",
-          sourceExternalId: input.sourceExternalId,
+          sourceExternalId,
           sourceAccountId: own?.marketplaceAccountId ?? null,
           batchJobId: input.batchJobId ?? null,
           createdById: ctx.userId,
         },
         select: { id: true },
       });
-      return { status: "created", draftId: draft.id };
+      return {
+        status: "created",
+        draftId: draft.id,
+        catalogProductId,
+        copiedExternalId: sourceExternalId,
+      };
     } catch (error) {
       if (isUniqueViolation(error)) return { status: "duplicate" };
       throw error;
