@@ -4,6 +4,7 @@ import type { CanonicalListing, PublishModel } from "@/domain/listings/canonical
 
 import {
   MarketplaceApiError,
+  MarketplaceValidationError,
   type CategorySuggestion,
   type FeeQuote,
   type MarketplaceListing,
@@ -12,6 +13,7 @@ import {
 import { bearer, failure } from "./editing";
 import { ML_API_BASE, mlFetch, type FetchFn } from "./http";
 import { getJson, normalizeItem, toCents } from "./items";
+import { translateMlMessage } from "./messages";
 
 // Creating listings (Phase 2C).
 // - Category predictor: GET /sites/MLB/domain_discovery/search?q=&limit=
@@ -201,18 +203,52 @@ const json = (accessToken: string) => ({
   "content-type": "application/json",
 });
 
+const validationSchema = z
+  .object({
+    cause: z
+      .array(z.object({ type: z.string().nullish(), message: z.string().nullish() }).passthrough())
+      .nullish(),
+  })
+  .passthrough();
+
+/**
+ * Seen on 2026-10-10: /items/validate answers 400 even when every cause is
+ * "type": "warning" (e.g. "User has not mode me1", "Free shipping costs exceeds
+ * sale"), and publishing the same body succeeds. Only "error" causes are problems.
+ */
 export async function validateListing(
   fetchFn: FetchFn,
   accessToken: string,
   listing: CanonicalListing,
   model: PublishModel,
-): Promise<void> {
+): Promise<{ warnings: string[] }> {
   const response = await mlFetch(fetchFn, `${ML_API_BASE}/items/validate`, {
     method: "POST",
     headers: json(accessToken),
     body: JSON.stringify(toPublishBody(listing, model)),
   });
-  if (!response.ok) await failure(response, "Listing validation");
+  if (response.ok) return { warnings: [] };
+  if (response.status === 400) {
+    const parsed = validationSchema.safeParse(
+      await response
+        .clone()
+        .json()
+        .catch(() => null),
+    );
+    const causes = parsed.success ? (parsed.data.cause ?? []) : [];
+    if (causes.length && causes.every((cause) => cause.type === "warning")) {
+      return {
+        warnings: causes.map((cause) =>
+          translateMlMessage(cause.message ?? "Aviso do Mercado Livre"),
+        ),
+      };
+    }
+    const errors = causes.filter((cause) => cause.type !== "warning" && cause.message);
+    if (errors.length) {
+      throw new MarketplaceValidationError(errors.map((cause) => cause.message!));
+    }
+  }
+  return failure(response, "Listing validation");
 }
 
 export async function publishListing(

@@ -286,7 +286,7 @@ export async function quoteDraftFees(
 }
 
 export type CheckResult =
-  | { status: "valid" }
+  | { status: "valid"; warnings: string[] }
   | { status: "incomplete"; missing: string[] }
   | { status: "refused"; errors: string[] }
   | { status: "locked" | "writes_disabled" }
@@ -305,12 +305,16 @@ export async function validateDraft(
   const missing = missingForPublish(draft.listing, draft.model);
   if (missing.length) return { status: "incomplete", missing };
   try {
-    await market.connector.validateListing(market.token, draft.listing, draft.model);
+    const { warnings } = await market.connector.validateListing(
+      market.token,
+      draft.listing,
+      draft.model,
+    );
     await ctx.tdb.listingDraft.updateMany({
       where: { id: draftId, status: { in: [...EDITABLE] } },
       data: { status: "validated", lastErrors: [] },
     });
-    return { status: "valid" };
+    return { status: "valid", warnings };
   } catch (error) {
     if (error instanceof MarketplaceValidationError) {
       await ctx.tdb.listingDraft.updateMany({

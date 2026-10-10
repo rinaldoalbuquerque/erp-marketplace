@@ -231,7 +231,7 @@ export interface MarketplaceConnector {
     accessToken: string,
     listing: CanonicalListing,
     model: PublishModel,
-  ): Promise<void>;
+  ): Promise<{ warnings: string[] }>;
   /** Publishes a new listing (the description is sent afterwards with updateListingDescription). */
   publishListing(
     accessToken: string,

@@ -158,6 +158,40 @@ describe("Mercado Livre publishing", () => {
     expect(new URL(String(fetchFn.mock.calls[0]?.[0])).searchParams.get("price")).toBe("29.90");
   });
 
+  it("validate: 400 with only warnings is valid (real answer seen on 2026-10-10)", async () => {
+    const warningsOnly = fakeFetch(() => ({
+      status: 400,
+      body: {
+        cause: [
+          { type: "warning", code: "shipping.lost_me1_by_user", message: "User has not mode me1" },
+          {
+            type: "warning",
+            code: "shipping.free_shipping.cost_exceeded",
+            message: "Free shipping costs exceeds sale",
+          },
+        ],
+        message: "Validation error",
+        error: "validation_error",
+        status: 400,
+      },
+    }));
+    const result = await validateListing(warningsOnly, "t", listing, "user_products");
+    expect(result.warnings).toHaveLength(2);
+    // a warning mixed with an error: only the error is a problem
+    const mixed = fakeFetch(() => ({
+      status: 400,
+      body: {
+        cause: [
+          { type: "warning", message: "User has not mode me1" },
+          { type: "error", message: "The attributes [GTIN] are required" },
+        ],
+      },
+    }));
+    await expect(validateListing(mixed, "t", listing, "user_products")).rejects.toMatchObject({
+      causes: ["The attributes [GTIN] are required"],
+    });
+  });
+
   it("validate: 204 is ok; 400 brings the causes", async () => {
     await validateListing(
       fakeFetch(() => ({ status: 204 })),

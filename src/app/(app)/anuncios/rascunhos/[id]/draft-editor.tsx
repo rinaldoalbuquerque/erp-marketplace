@@ -241,7 +241,15 @@ export function DraftEditor({
         case "valid":
           setMessage({
             tone: "success",
-            lines: ["O Mercado Livre validou o anúncio: pode publicar."],
+            lines: [
+              "O Mercado Livre validou o anúncio: pode publicar.",
+              ...(result.warnings.length
+                ? [
+                    "Avisos gerais do Mercado Livre (não impedem a publicação):",
+                    ...result.warnings.map((warning) => `• ${warning}`),
+                  ]
+                : []),
+            ],
           });
           break;
         case "incomplete":
