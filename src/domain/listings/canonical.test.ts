@@ -140,7 +140,9 @@ describe("variants", () => {
   });
 
   it("old drafts without variants still parse (simple listing)", () => {
-    const { variants: _variants, variationAttributeIds: _ids, ...old } = emptyListing();
+    const old: Record<string, unknown> = { ...emptyListing() };
+    delete old.variants;
+    delete old.variationAttributeIds;
     const parsed = canonicalListingSchema.parse(old);
     expect(parsed.variants).toEqual([]);
     expect(parsed.variationAttributeIds).toEqual([]);
