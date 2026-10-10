@@ -148,3 +148,33 @@ describe("variants", () => {
     expect(parsed.variationAttributeIds).toEqual([]);
   });
 });
+
+describe("per-variant overrides", () => {
+  it("each variant may have its own listing type, warranty, description and package", () => {
+    const base = {
+      ...emptyListing(),
+      listingTypeId: "gold_special" as const,
+      warranty: { type: "Garantia do vendedor", time: "90 dias" },
+      description: "Descrição padrão",
+      package: { weightG: 500, heightCm: 10, widthCm: 20, lengthCm: 30 },
+    };
+    const premium = {
+      ...emptyVariant("p"),
+      listingTypeId: "gold_pro" as const,
+      warranty: { type: "Sem garantia", time: null },
+      description: "Descrição da variante",
+      package: { weightG: 800, heightCm: null, widthCm: null, lengthCm: null },
+    };
+    expect(variantListing(base, premium)).toMatchObject({
+      listingTypeId: "gold_pro",
+      warranty: { type: "Sem garantia", time: null },
+      description: "Descrição da variante",
+      package: { weightG: 800, heightCm: 10, widthCm: 20, lengthCm: 30 },
+    });
+    expect(variantListing(base, emptyVariant("x"))).toMatchObject({
+      listingTypeId: "gold_special",
+      description: "Descrição padrão",
+      package: base.package,
+    });
+  });
+});

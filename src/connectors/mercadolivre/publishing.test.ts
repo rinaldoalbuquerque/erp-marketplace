@@ -62,6 +62,21 @@ describe("publishing body", () => {
     expect(body).not.toHaveProperty("title");
   });
 
+  it("package size and weight go as SELLER_PACKAGE_* attributes (numbers only)", () => {
+    const body = toPublishBody(
+      { ...listing, package: { weightG: 500, heightCm: 10, widthCm: 20, lengthCm: 30 } },
+      "user_products",
+    );
+    expect(body.attributes).toEqual(
+      expect.arrayContaining([
+        { id: "SELLER_PACKAGE_WEIGHT", value_name: "500" },
+        { id: "SELLER_PACKAGE_HEIGHT", value_name: "10" },
+        { id: "SELLER_PACKAGE_WIDTH", value_name: "20" },
+        { id: "SELLER_PACKAGE_LENGTH", value_name: "30" },
+      ]),
+    );
+  });
+
   it("traditional: title and no family_name", () => {
     const body = toPublishBody(listing, "traditional");
     expect(body).toMatchObject({ title: "Borracha Panela de Pressão 4,5 L Clock" });

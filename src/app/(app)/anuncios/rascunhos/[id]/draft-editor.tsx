@@ -245,6 +245,7 @@ export function DraftEditor({
       pictures,
       attributes,
       warranty: { type: warrantyType.trim() || null, time: warrantyTime.trim() || null },
+      package: initial.package,
       variationAttributeIds: kind === "variants" ? variationIds : [],
       variants: kind === "variants" ? variants : [],
     };

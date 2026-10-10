@@ -167,6 +167,27 @@ export async function quoteFees(
   return quotes;
 }
 
+// Package size and weight go as attributes, numbers only (no unit), weight in
+// whole grams: https://developers.mercadolivre.com.br/pt_br/itens-atributos-de-envio-e-dimensoes
+const PACKAGE_ATTRIBUTES = {
+  weightG: "SELLER_PACKAGE_WEIGHT",
+  heightCm: "SELLER_PACKAGE_HEIGHT",
+  widthCm: "SELLER_PACKAGE_WIDTH",
+  lengthCm: "SELLER_PACKAGE_LENGTH",
+} as const;
+
+function withPackage(listing: CanonicalListing) {
+  const own = (Object.keys(PACKAGE_ATTRIBUTES) as Array<keyof typeof PACKAGE_ATTRIBUTES>)
+    .filter((key) => listing.package[key] !== null)
+    .map((key) => ({
+      id: PACKAGE_ATTRIBUTES[key],
+      valueId: null,
+      valueName: String(listing.package[key]),
+    }));
+  const replaced = new Set<string>(own.map((attribute) => attribute.id));
+  return [...listing.attributes.filter((attribute) => !replaced.has(attribute.id)), ...own];
+}
+
 /** Canonical listing -> ML POST /items body. */
 export function toPublishBody(listing: CanonicalListing, model: PublishModel) {
   if (!listing.categoryId || listing.priceCents === null) {
@@ -189,7 +210,7 @@ export function toPublishBody(listing: CanonicalListing, model: PublishModel) {
     pictures: listing.pictures.map((picture) =>
       picture.id ? { id: picture.id } : { source: picture.url },
     ),
-    attributes: listing.attributes.map((attribute) => ({
+    attributes: withPackage(listing).map((attribute) => ({
       id: attribute.id,
       ...(attribute.valueId ? { value_id: attribute.valueId } : {}),
       ...(attribute.valueName !== null ? { value_name: attribute.valueName } : {}),

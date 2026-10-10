@@ -35,6 +35,28 @@ const pictureSchema = z
     error: "Foto sem código nem endereço.",
   });
 
+/** Package of the product (used by the marketplace to calculate shipping). */
+const packageSchema = z.object({
+  weightG: z.number().int().positive().max(1_000_000).nullable(),
+  heightCm: z.number().int().positive().max(10_000).nullable(),
+  widthCm: z.number().int().positive().max(10_000).nullable(),
+  lengthCm: z.number().int().positive().max(10_000).nullable(),
+});
+export type ListingPackage = z.infer<typeof packageSchema>;
+export const EMPTY_PACKAGE: ListingPackage = {
+  weightG: null,
+  heightCm: null,
+  widthCm: null,
+  lengthCm: null,
+};
+
+const warrantySchema = z.object({
+  /** e.g. "Garantia do vendedor", "Sem garantia" */
+  type: z.string().trim().max(100).nullable(),
+  /** e.g. "90 dias" */
+  time: z.string().trim().max(100).nullable(),
+});
+
 /**
  * One variant of a listing (e.g. Cor = Azul). On User Products marketplaces each
  * variant is published as its own listing of the same family; fields left empty
@@ -55,6 +77,13 @@ const variantSchema = z.object({
   sellerSku: z.string().trim().max(100).nullable(),
   /** ERP SKU the variant sells (linked after publishing). */
   skuId: z.string().uuid().nullable(),
+  /** SKU code typed on the form; created in the ERP when publishing if it does not exist. */
+  skuCode: z.string().trim().max(60).nullable().default(null),
+  /** Per-variant overrides (null = the listing's own). */
+  listingTypeId: z.enum(["gold_special", "gold_pro"]).nullable().default(null),
+  warranty: warrantySchema.nullable().default(null),
+  description: z.string().max(50_000).nullable().default(null),
+  package: packageSchema.default(EMPTY_PACKAGE),
 });
 
 export type CanonicalVariant = z.infer<typeof variantSchema>;
@@ -74,12 +103,8 @@ export const canonicalListingSchema = z.object({
   availableQuantity: z.number().int().min(0).max(1_000_000),
   pictures: z.array(pictureSchema).max(12),
   attributes: z.array(attributeValueSchema).max(300),
-  warranty: z.object({
-    /** e.g. "Garantia do vendedor", "Sem garantia" */
-    type: z.string().trim().max(100).nullable(),
-    /** e.g. "90 dias" */
-    time: z.string().trim().max(100).nullable(),
-  }),
+  warranty: warrantySchema,
+  package: packageSchema.default(EMPTY_PACKAGE),
   /** Attributes that vary among the variants (e.g. COLOR, SIZE). Empty = simple listing. */
   variationAttributeIds: z.array(z.string().min(1).max(100)).max(5).default([]),
   variants: z.array(variantSchema).max(100).default([]),
@@ -101,6 +126,7 @@ export function emptyListing(): CanonicalListing {
     pictures: [],
     attributes: [],
     warranty: { type: null, time: null },
+    package: { ...EMPTY_PACKAGE },
     variationAttributeIds: [],
     variants: [],
   };
@@ -117,6 +143,11 @@ export function emptyVariant(key: string): CanonicalVariant {
     emptyGtinReason: null,
     sellerSku: null,
     skuId: null,
+    skuCode: null,
+    listingTypeId: null,
+    warranty: null,
+    description: null,
+    package: { ...EMPTY_PACKAGE },
   };
 }
 
@@ -143,11 +174,21 @@ export function variantListing(
     own.push({ id: EMPTY_GTIN_REASON, valueId: null, valueName: variant.emptyGtinReason });
   }
   if (variant.sellerSku) own.push({ id: SELLER_SKU, valueId: null, valueName: variant.sellerSku });
+  const pick = <T>(own: T | null, shared: T | null) => (own ?? shared) as T | null;
   return {
     ...base,
     priceCents: variant.priceCents ?? base.priceCents,
     availableQuantity: variant.availableQuantity,
     pictures: variant.pictures.length ? variant.pictures : base.pictures,
+    listingTypeId: variant.listingTypeId ?? base.listingTypeId,
+    warranty: variant.warranty ?? base.warranty,
+    description: variant.description ?? base.description,
+    package: {
+      weightG: pick(variant.package.weightG, base.package.weightG),
+      heightCm: pick(variant.package.heightCm, base.package.heightCm),
+      widthCm: pick(variant.package.widthCm, base.package.widthCm),
+      lengthCm: pick(variant.package.lengthCm, base.package.lengthCm),
+    },
     attributes: [...base.attributes.filter((attribute) => !replaced.has(attribute.id)), ...own],
     variationAttributeIds: [],
     variants: [],

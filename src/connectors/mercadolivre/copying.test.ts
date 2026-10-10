@@ -89,6 +89,7 @@ describe("getListingForCopy", () => {
         ],
         attributes: [],
         warranty: { type: null, time: null },
+        package: { weightG: null, heightCm: null, widthCm: null, lengthCm: null },
         variationAttributeIds: [],
         variants: [],
       },
