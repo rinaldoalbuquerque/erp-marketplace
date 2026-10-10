@@ -89,6 +89,8 @@ describe("getListingForCopy", () => {
         ],
         attributes: [],
         warranty: { type: null, time: null },
+        variationAttributeIds: [],
+        variants: [],
       },
       "user_products",
     );

@@ -35,6 +35,30 @@ const pictureSchema = z
     error: "Foto sem código nem endereço.",
   });
 
+/**
+ * One variant of a listing (e.g. Cor = Azul). On User Products marketplaces each
+ * variant is published as its own listing of the same family; fields left empty
+ * (price, pictures) use the listing's own.
+ */
+const variantSchema = z.object({
+  /** Local key (stable while editing; the source variation id for copies). */
+  key: z.string().min(1).max(60),
+  /** Values of the varying attributes (variationAttributeIds). */
+  attributes: z.array(attributeValueSchema).max(10),
+  priceCents: z.number().int().positive().max(1_000_000_000).nullable(),
+  availableQuantity: z.number().int().min(0).max(1_000_000),
+  pictures: z.array(pictureSchema).max(12),
+  /** Barcode (EAN/UPC); null with emptyGtinReason when the product has none. */
+  gtin: z.string().trim().max(20).nullable(),
+  emptyGtinReason: z.string().max(100).nullable(),
+  /** Seller code shown on the marketplace (SELLER_SKU). */
+  sellerSku: z.string().trim().max(100).nullable(),
+  /** ERP SKU the variant sells (linked after publishing). */
+  skuId: z.string().uuid().nullable(),
+});
+
+export type CanonicalVariant = z.infer<typeof variantSchema>;
+
 export const canonicalListingSchema = z.object({
   /** User Products: generic name of the family; the marketplace builds the title. */
   familyName: z.string().trim().max(200),
@@ -56,6 +80,9 @@ export const canonicalListingSchema = z.object({
     /** e.g. "90 dias" */
     time: z.string().trim().max(100).nullable(),
   }),
+  /** Attributes that vary among the variants (e.g. COLOR, SIZE). Empty = simple listing. */
+  variationAttributeIds: z.array(z.string().min(1).max(100)).max(5).default([]),
+  variants: z.array(variantSchema).max(100).default([]),
 });
 
 export type CanonicalListing = z.infer<typeof canonicalListingSchema>;
@@ -74,7 +101,65 @@ export function emptyListing(): CanonicalListing {
     pictures: [],
     attributes: [],
     warranty: { type: null, time: null },
+    variationAttributeIds: [],
+    variants: [],
   };
+}
+
+export function emptyVariant(key: string): CanonicalVariant {
+  return {
+    key,
+    attributes: [],
+    priceCents: null,
+    availableQuantity: 0,
+    pictures: [],
+    gtin: null,
+    emptyGtinReason: null,
+    sellerSku: null,
+    skuId: null,
+  };
+}
+
+const SELLER_SKU = "SELLER_SKU";
+const EMPTY_GTIN_REASON = "EMPTY_GTIN_REASON";
+
+/**
+ * The single listing published for one variant: the listing's shared data plus
+ * the variant's values (attributes, barcode, seller code, price, stock, pictures).
+ */
+export function variantListing(
+  base: CanonicalListing,
+  variant: CanonicalVariant,
+): CanonicalListing {
+  const replaced = new Set([
+    ...variant.attributes.map((attribute) => attribute.id),
+    GTIN,
+    EMPTY_GTIN_REASON,
+    SELLER_SKU,
+  ]);
+  const own: AttributeValue[] = [...variant.attributes];
+  if (variant.gtin) own.push({ id: GTIN, valueId: null, valueName: variant.gtin });
+  else if (variant.emptyGtinReason) {
+    own.push({ id: EMPTY_GTIN_REASON, valueId: null, valueName: variant.emptyGtinReason });
+  }
+  if (variant.sellerSku) own.push({ id: SELLER_SKU, valueId: null, valueName: variant.sellerSku });
+  return {
+    ...base,
+    priceCents: variant.priceCents ?? base.priceCents,
+    availableQuantity: variant.availableQuantity,
+    pictures: variant.pictures.length ? variant.pictures : base.pictures,
+    attributes: [...base.attributes.filter((attribute) => !replaced.has(attribute.id)), ...own],
+    variationAttributeIds: [],
+    variants: [],
+  };
+}
+
+/** Text of a variant for messages, e.g. "Azul / M" (falls back to its position). */
+export function variantLabel(variant: CanonicalVariant, index: number): string {
+  const values = variant.attributes
+    .map((attribute) => attribute.valueName)
+    .filter((value): value is string => Boolean(value));
+  return values.length ? values.join(" / ") : `Variante ${index + 1}`;
 }
 
 /** ERP data used to start a listing from a SKU. */
@@ -114,7 +199,36 @@ export function missingForPublish(listing: CanonicalListing, model: PublishModel
   if (model === "user_products" && !listing.familyName) missing.push("Nome da família");
   if (model === "traditional" && !listing.title) missing.push("Título");
   if (!listing.categoryId) missing.push("Categoria");
-  if (listing.priceCents === null) missing.push("Preço");
-  if (listing.pictures.length === 0) missing.push("Ao menos uma foto");
+  if (listing.variants.length === 0) {
+    if (listing.priceCents === null) missing.push("Preço");
+    if (listing.pictures.length === 0) missing.push("Ao menos uma foto");
+    return missing;
+  }
+  if (model !== "user_products") {
+    missing.push("Variantes só podem ser publicadas em contas User Products");
+  }
+  if (listing.variationAttributeIds.length === 0) missing.push("O que varia entre as variantes");
+  const seen = new Map<string, number>();
+  listing.variants.forEach((variant, index) => {
+    const label = variantLabel(variant, index);
+    for (const id of listing.variationAttributeIds) {
+      const value = variant.attributes.find((attribute) => attribute.id === id);
+      if (!value?.valueName && !value?.valueId) missing.push(`${label}: valor de ${id}`);
+    }
+    if ((variant.priceCents ?? listing.priceCents) === null) missing.push(`${label}: preço`);
+    if (variant.pictures.length === 0 && listing.pictures.length === 0) {
+      missing.push(`${label}: ao menos uma foto`);
+    }
+    const combination = listing.variationAttributeIds
+      .map((id) => variant.attributes.find((attribute) => attribute.id === id)?.valueName ?? "")
+      .join("|")
+      .toLowerCase();
+    const twin = seen.get(combination);
+    if (twin !== undefined) {
+      missing.push(`Variantes ${twin + 1} e ${index + 1} têm os mesmos valores`);
+    } else {
+      seen.set(combination, index);
+    }
+  });
   return missing;
 }
