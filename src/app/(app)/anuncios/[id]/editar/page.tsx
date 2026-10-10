@@ -300,6 +300,8 @@ function FamilyPage({
       price: centsToInput(member.editable.listing.priceCents),
       status: member.editable.listing.status,
       description: member.editable.description ?? "",
+      pictures: member.editable.pictures ?? [],
+      listingTypeId: member.editable.listing.listingTypeId,
       attributes: Object.fromEntries(
         editableDefinitions.map((definition) => [
           definition.id,

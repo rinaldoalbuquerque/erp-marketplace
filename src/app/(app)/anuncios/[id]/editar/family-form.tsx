@@ -65,11 +65,15 @@ export type FamilyMemberInitial = {
   description: string;
   /** Inputs of every editable attribute of the category. */
   attributes: Record<string, AttributeInput>;
+  pictures: Array<{ id: string; url: string | null }>;
+  listingTypeId: string | null;
 };
 
 type MemberState = {
   price: string;
   status: string;
+  listingTypeId: string | null;
+  pictures: Array<{ id: string; url: string | null }>;
   attributes: Record<string, AttributeInput>;
   ownDescription: boolean;
   description: string;
@@ -223,6 +227,8 @@ export function FamilyEditForm({
           status: member.status,
           attributes: { ...member.attributes },
           ownDescription: member.description !== first.description,
+          listingTypeId: member.listingTypeId,
+          pictures: member.pictures,
           description: member.description,
         },
       ]),
@@ -310,24 +316,56 @@ export function FamilyEditForm({
         }
         added.push(result.picture);
       }
-      setNewRows((current) =>
-        current.map((row) =>
-          row.key === key ? { ...row, pictures: [...row.pictures, ...added].slice(0, 12) } : row,
-        ),
-      );
+      setPictures(key, (pictures) => [...pictures, ...added].slice(0, 12));
       setUploading(null);
     });
   }
 
-  function movePicture(key: string, index: number, delta: number) {
+  /** Changes the pictures of a published variant (by listing id) or of a new one (by key). */
+  function setPictures(
+    key: string,
+    change: (pictures: Array<{ id: string | null; url: string | null }>) => Array<{
+      id: string | null;
+      url: string | null;
+    }>,
+  ) {
+    if (rows[key]) {
+      setRows((current) => ({
+        ...current,
+        [key]: {
+          ...current[key]!,
+          pictures: change(current[key]!.pictures).filter(
+            (picture): picture is { id: string; url: string | null } => Boolean(picture.id),
+          ),
+        },
+      }));
+      return;
+    }
     setNewRows((current) =>
-      current.map((row) => {
-        if (row.key !== key) return row;
-        const next = [...row.pictures];
-        const [item] = next.splice(index, 1);
-        next.splice(Math.max(0, Math.min(next.length, index + delta)), 0, item!);
-        return { ...row, pictures: next };
-      }),
+      current.map((row) => (row.key === key ? { ...row, pictures: change(row.pictures) } : row)),
+    );
+  }
+
+  function movePicture(key: string, index: number, delta: number) {
+    setPictures(key, (pictures) => {
+      const next = [...pictures];
+      const [item] = next.splice(index, 1);
+      next.splice(Math.max(0, Math.min(next.length, index + delta)), 0, item!);
+      return next;
+    });
+  }
+
+  function copyPictures(fromId: string, target: string) {
+    const source = rows[fromId]?.pictures ?? [];
+    setRows((current) =>
+      Object.fromEntries(
+        Object.entries(current).map(([id, row]) => [
+          id,
+          id !== fromId && (target === "all" || target === id)
+            ? { ...row, pictures: [...source] }
+            : row,
+        ]),
+      ),
     );
   }
 
@@ -347,6 +385,19 @@ export function FamilyEditForm({
       }
       if (row.status !== member.status && (row.status === "active" || row.status === "paused")) {
         payload.status = row.status;
+        changed = true;
+      }
+      const pictureIds = row.pictures.map((picture) => picture.id);
+      if (pictureIds.join("|") !== member.pictures.map((picture) => picture.id).join("|")) {
+        if (pictureIds.length === 0) errors.push(`${member.label}: precisa de ao menos uma foto.`);
+        payload.pictureIds = pictureIds;
+        changed = true;
+      }
+      if (
+        row.listingTypeId !== member.listingTypeId &&
+        (row.listingTypeId === "gold_special" || row.listingTypeId === "gold_pro")
+      ) {
+        payload.listingTypeId = row.listingTypeId;
         changed = true;
       }
       const text = row.ownDescription ? row.description : descriptionDirty ? description : null;
@@ -683,6 +734,22 @@ export function FamilyEditForm({
                   onBulk={() => bulkMembers("Preço", (row, value) => ({ ...row, price: value }))}
                 />
                 <BulkHeader
+                  label="Tipo"
+                  onBulk={() => {
+                    const value = window.prompt("Tipo para todas: 1 = Clássico, 2 = Premium");
+                    const type = value === "1" ? "gold_special" : value === "2" ? "gold_pro" : null;
+                    if (!type) return;
+                    setRows((current) =>
+                      Object.fromEntries(
+                        Object.entries(current).map(([id, row]) => [
+                          id,
+                          { ...row, listingTypeId: type },
+                        ]),
+                      ),
+                    );
+                  }}
+                />
+                <BulkHeader
                   label="Status"
                   onBulk={() => {
                     const value = window.prompt("Status para todas: 1 = Ativo, 2 = Pausado");
@@ -795,6 +862,24 @@ export function FamilyEditForm({
                         inputMode="decimal"
                         className={`${INPUT} w-24`}
                       />
+                    </td>
+                    <td className="px-2 py-2">
+                      <select
+                        value={row.listingTypeId ?? ""}
+                        onChange={(event) =>
+                          updateRow(member.listingId, { listingTypeId: event.target.value })
+                        }
+                        className={`${INPUT} w-28`}
+                      >
+                        {row.listingTypeId && !(row.listingTypeId in LISTING_TYPES) ? (
+                          <option value={row.listingTypeId}>{row.listingTypeId}</option>
+                        ) : null}
+                        {Object.entries(LISTING_TYPES).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     <td className="px-2 py-2">
                       {editableStatus ? (
@@ -1010,6 +1095,122 @@ export function FamilyEditForm({
             </div>
           </div>
         ))}
+      </Section>
+
+      <Section title="Imagens da variação">
+        <p className="text-xs text-muted">
+          A primeira foto é a principal. Ao salvar, as fotos de cada variante alterada são
+          substituídas pela lista abaixo, nesta ordem.
+        </p>
+        {members.map((member) => {
+          const row = rows[member.listingId]!;
+          return (
+            <div
+              key={member.listingId}
+              className="flex flex-col gap-2 rounded-lg border border-border bg-bg p-3"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-medium text-ink">
+                  {member.label}{" "}
+                  <span className="font-normal text-muted">({row.pictures.length}/12)</span>
+                </span>
+                <div className="flex items-center gap-3">
+                  <label className="inline-flex cursor-pointer items-center gap-1 text-sm text-brand hover:underline">
+                    <ImagePlus className="size-4" aria-hidden="true" />
+                    Adicionar imagens
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      multiple
+                      className="sr-only"
+                      disabled={uploading !== null}
+                      onChange={(event) => {
+                        if (event.target.files?.length)
+                          upload(member.listingId, event.target.files);
+                        event.target.value = "";
+                      }}
+                    />
+                  </label>
+                  {members.length > 1 && row.pictures.length ? (
+                    <select
+                      value=""
+                      onChange={(event) =>
+                        event.target.value && copyPictures(member.listingId, event.target.value)
+                      }
+                      className="h-8 rounded-lg border border-border bg-surface px-2 text-xs text-brand"
+                      aria-label="Copiar imagens para"
+                    >
+                      <option value="">Copiar imagens para…</option>
+                      <option value="all">Todas as outras variantes</option>
+                      {members
+                        .filter((other) => other.listingId !== member.listingId)
+                        .map((other) => (
+                          <option key={other.listingId} value={other.listingId}>
+                            {other.label}
+                          </option>
+                        ))}
+                    </select>
+                  ) : null}
+                </div>
+              </div>
+              {uploading === member.listingId ? (
+                <span className="text-xs text-muted">Enviando ao Mercado Livre…</span>
+              ) : null}
+              <ul className="flex flex-wrap gap-2">
+                {row.pictures.map((picture, position) => (
+                  <li
+                    key={`${picture.id}-${position}`}
+                    className="flex w-20 flex-col items-center gap-1"
+                  >
+                    <div className="flex size-20 items-center justify-center overflow-hidden rounded-lg border border-border bg-white">
+                      {picture.url ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- ML-hosted preview
+                        <img src={picture.url} alt="" className="max-h-full object-contain" />
+                      ) : (
+                        <span className="px-1 text-center text-[10px] text-muted">
+                          {picture.id}
+                        </span>
+                      )}
+                    </div>
+                    <span className="flex gap-1 text-muted">
+                      <button
+                        type="button"
+                        aria-label="Mover para a esquerda"
+                        onClick={() => movePicture(member.listingId, position, -1)}
+                        className="hover:text-ink"
+                      >
+                        <ArrowLeft className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Mover para a direita"
+                        onClick={() => movePicture(member.listingId, position, 1)}
+                        className="hover:text-ink"
+                      >
+                        <ArrowRight className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Remover foto"
+                        onClick={() =>
+                          setPictures(member.listingId, (pictures) =>
+                            pictures.filter((_, item) => item !== position),
+                          )
+                        }
+                        className="hover:text-danger"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </span>
+                    {position === 0 ? (
+                      <span className="text-[10px] text-muted">principal</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
       </Section>
 
       <Section title="Descrição">
