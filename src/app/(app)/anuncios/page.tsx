@@ -16,7 +16,15 @@ import {
 } from "@/server/listings/queries";
 import { getTenantContext } from "@/server/tenant/tenant-db";
 
+import { createVariationAction } from "./copy-actions";
 import { REPLICATE_FORM_ID, ReplicateBar } from "./replicate-bar";
+
+const VARIATION_ERRORS: Record<string, string> = {
+  not_found: "Anúncio não encontrado ou conta desconectada.",
+  not_user_products: "Nova variação só para anúncios no modelo User Products (com família).",
+  reconnect: "A conta precisa ser reconectada em Contas de marketplace.",
+  marketplace_error: "O Mercado Livre não respondeu. Tente de novo.",
+};
 
 export const metadata: Metadata = { title: "Anúncios" };
 
@@ -223,6 +231,15 @@ async function Listings({ searchParams }: Pick<PageProps<"/anuncios">, "searchPa
         ) : null}
       </form>
 
+      {VARIATION_ERRORS[params.variacao as string] ? (
+        <p
+          role="alert"
+          className="mb-4 rounded-lg border-l-4 border-danger bg-danger-soft px-3 py-2 text-sm text-danger"
+        >
+          {VARIATION_ERRORS[params.variacao as string]}
+        </p>
+      ) : null}
+
       {canEdit && result.listings.length > 0 ? (
         <ReplicateBar
           accounts={accounts.map((account) => ({ id: account.id, nickname: account.nickname }))}
@@ -334,6 +351,20 @@ async function Listings({ searchParams }: Pick<PageProps<"/anuncios">, "searchPa
                                 <Pencil className="size-3" aria-hidden="true" />
                                 Editar
                               </Link>
+                            ) : null}
+                            {canEdit &&
+                            listing.listingModel === "user_products" &&
+                            listing.familyId ? (
+                              <form action={createVariationAction.bind(null, listing.id)}>
+                                <button
+                                  type="submit"
+                                  className="inline-flex items-center gap-0.5 font-medium text-brand hover:underline"
+                                  title="Criar outra cor, tamanho… na mesma família"
+                                >
+                                  <Plus className="size-3" aria-hidden="true" />
+                                  Nova variação
+                                </button>
+                              </form>
                             ) : null}
                           </p>
                         </div>

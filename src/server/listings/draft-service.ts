@@ -469,3 +469,70 @@ export function listDrafts(tdb: TenantDb, filters: { batchJobId?: string | null 
 }
 
 export { parseContent as draftListing };
+
+/** "Nova variação": the family the draft must join (varying attributes), read at the marketplace. */
+export async function draftFamily(ctx: Ctx, draftId: string, deps: DraftDeps = {}) {
+  const draft = await ctx.tdb.listingDraft.findFirst({
+    where: { id: draftId },
+    select: { targetFamilyId: true },
+  });
+  if (!draft?.targetFamilyId) return null;
+  const market = await marketplaceFor(ctx, draftId, deps);
+  if (market.status !== "ok") return null;
+  try {
+    return await market.connector.getFamily(market.token, draft.targetFamilyId);
+  } catch {
+    return null;
+  }
+}
+
+/** Links the draft to an ERP SKU (or none) while it is still editable. */
+export async function setDraftSku(
+  tdb: TenantDb,
+  draftId: string,
+  skuId: string | null,
+): Promise<boolean> {
+  if (skuId && !(await tdb.sku.findFirst({ where: { id: skuId }, select: { id: true } }))) {
+    return false;
+  }
+  const updated = await tdb.listingDraft.updateMany({
+    where: { id: draftId, status: { in: [...EDITABLE] } },
+    data: { skuId },
+  });
+  return updated.count === 1;
+}
+
+/**
+ * SKUs offered for a draft: the other SKUs of the same product (variations of a
+ * product are usually its SKUs), based on the draft's SKU or the source listing's.
+ */
+export async function draftSkuOptions(tdb: TenantDb, draftId: string) {
+  const draft = await tdb.listingDraft.findFirst({
+    where: { id: draftId },
+    select: {
+      sourceExternalId: true,
+      sourceAccountId: true,
+      sku: { select: { productId: true } },
+    },
+  });
+  if (!draft) return [];
+  let productId = draft.sku?.productId ?? null;
+  if (!productId && draft.sourceExternalId && draft.sourceAccountId) {
+    const mapping = await tdb.skuListingMapping.findFirst({
+      where: {
+        listing: {
+          externalId: draft.sourceExternalId,
+          marketplaceAccountId: draft.sourceAccountId,
+        },
+      },
+      select: { sku: { select: { productId: true } } },
+    });
+    productId = mapping?.sku.productId ?? null;
+  }
+  if (!productId) return [];
+  return tdb.sku.findMany({
+    where: { productId },
+    orderBy: { code: "asc" },
+    select: { id: true, code: true, variation: true, stockOnHand: true },
+  });
+}

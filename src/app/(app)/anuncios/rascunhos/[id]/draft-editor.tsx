@@ -75,6 +75,7 @@ export function DraftEditor({
   initial,
   initialDefinitions,
   lastErrors,
+  varyingIds = [],
   sku,
 }: {
   draftId: string;
@@ -84,6 +85,8 @@ export function DraftEditor({
   initial: CanonicalListing;
   initialDefinitions: AttributeDefinition[] | null;
   lastErrors: string[];
+  /** "Nova variação": attributes that vary inside the family (must be filled). */
+  varyingIds?: string[];
   /** costCents only when the member may see costs */
   sku: { code: string; costCents: number | null; stockOnHand: number } | null;
 }) {
@@ -144,13 +147,17 @@ export function DraftEditor({
     ),
   );
 
-  const { main, advanced } = useMemo(() => {
+  const { varying, main, advanced } = useMemo(() => {
     const editableDefs = (definitions ?? []).filter((definition) => !definition.readOnly);
+    const isVarying = (id: string) => varyingIds.includes(id);
     return {
-      main: sortForForm(editableDefs.filter((definition) => !definition.hidden)),
-      advanced: editableDefs.filter((definition) => definition.hidden),
+      varying: editableDefs.filter((definition) => isVarying(definition.id)),
+      main: sortForForm(
+        editableDefs.filter((definition) => !definition.hidden && !isVarying(definition.id)),
+      ),
+      advanced: editableDefs.filter((definition) => definition.hidden && !isVarying(definition.id)),
     };
-  }, [definitions]);
+  }, [definitions, varyingIds]);
 
   /** Current form -> canonical listing (null + field errors when something is invalid). */
   function collect(): CanonicalListing | null {
@@ -172,6 +179,12 @@ export function DraftEditor({
         const check = fromInput(definition, input);
         if (!check.ok) fieldErrors[`attr.${definition.id}`] = check.error;
         else if (check.value) attributes.push(check.value);
+      }
+    }
+    for (const definition of varying) {
+      const input = inputs[definition.id];
+      if (!input?.notApplicable && !input?.value.trim()) {
+        fieldErrors[`attr.${definition.id}`] = "Preencha: é o que muda nesta variação.";
       }
     }
     setErrors(fieldErrors);
@@ -271,8 +284,21 @@ export function DraftEditor({
               ...(result.descriptionFailed
                 ? ["A descrição não foi aceita agora; ajuste na tela de edição do anúncio."]
                 : []),
+              ...(result.family === "same" ? ["Entrou na mesma família do anúncio original."] : []),
+              ...(result.family === "unknown"
+                ? ["O Mercado Livre ainda não informou a família; confira em alguns minutos."]
+                : []),
             ],
           });
+          if (result.family === "different") {
+            setMessage({
+              tone: "signal",
+              lines: [
+                `Anúncio publicado: ${result.externalId}, mas o Mercado Livre o colocou numa família separada.`,
+                "Isso acontece quando algum atributo principal (marca, modelo…) ficou diferente do original. Confira na edição do anúncio.",
+              ],
+            });
+          }
           break;
         case "incomplete":
           setMessage({ tone: "error", lines: ["Falta preencher:", ...result.missing] });
@@ -567,6 +593,33 @@ export function DraftEditor({
             branco e produto inteiro ajudam na aprovação. Remover ou reordenar vale ao salvar.
           </p>
         </section>
+
+        {varying.length ? (
+          <section className="flex flex-col gap-3 rounded-xl border-2 border-brand bg-surface p-5">
+            <div>
+              <h2 className="font-display text-base font-semibold text-ink">
+                O que muda nesta variação *
+              </h2>
+              <p className="text-sm text-muted">
+                Atributos que diferenciam as variações desta família no Mercado Livre. Os demais
+                devem ficar iguais ao original para o anúncio entrar na mesma família.
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {varying.map((definition) => (
+                <AttributeField
+                  key={definition.id}
+                  definition={definition}
+                  input={inputs[definition.id] ?? { value: "" }}
+                  error={errors[`attr.${definition.id}`]}
+                  onChange={(next) =>
+                    setInputs((current) => ({ ...current, [definition.id]: next }))
+                  }
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {definitions === null ? (
           <p className="rounded-xl border border-dashed border-border bg-surface p-5 text-sm text-muted">

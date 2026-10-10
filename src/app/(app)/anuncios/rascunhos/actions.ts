@@ -16,6 +16,7 @@ import {
   publishDraft,
   quoteDraftFees,
   saveDraftContent,
+  setDraftSku,
   suggestDraftCategories,
   validateDraft,
   type CheckResult,
@@ -139,4 +140,14 @@ export async function deleteDraftAction(draftId: string) {
   if (id.safeParse(draftId).success) await deleteDraft(ctx.tdb, draftId);
   revalidatePath("/anuncios/rascunhos");
   redirect("/anuncios/rascunhos");
+}
+
+/** Links the draft to an ERP SKU (or none). */
+export async function setDraftSkuAction(draftId: string, formData: FormData) {
+  const { ctx } = await context();
+  const skuId = String(formData.get("skuId") ?? "");
+  if (id.safeParse(draftId).success) {
+    await setDraftSku(ctx.tdb, draftId, id.safeParse(skuId).success ? skuId : null);
+  }
+  revalidatePath(`/anuncios/rascunhos/${draftId}`);
 }

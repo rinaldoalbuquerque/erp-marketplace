@@ -13,7 +13,7 @@ import {
   startReplicate,
   type BatchProgress,
 } from "@/server/listings/batch-service";
-import { copyToDraft } from "@/server/listings/copy-service";
+import { copyToDraft, createVariationDraft } from "@/server/listings/copy-service";
 import { getTenantContext } from "@/server/tenant/tenant-db";
 
 // Batches run AFTER the response (next/server `after`), within the page's
@@ -104,9 +104,25 @@ export async function copyOneAction(formData: FormData) {
   if (result.status !== "created") {
     redirect(`/anuncios/copiar?erro=${result.status}&ref=${encodeURIComponent(ref)}`);
   }
+  if (result.draftIds.length > 1) {
+    redirect(`/anuncios/rascunhos?variacoes=${result.draftIds.length}`);
+  }
   redirect(
     result.catalogProductId
       ? `/anuncios/rascunhos/${result.draftId}?catalogo=${result.catalogProductId}`
       : `/anuncios/rascunhos/${result.draftId}`,
   );
+}
+
+/** "Nova variação" of an own User Products listing: opens the new draft. */
+export async function createVariationAction(listingId: string) {
+  const member = await requirePermission("listings.edit");
+  if (!z.uuid().safeParse(listingId).success) redirect("/anuncios");
+  const { tdb } = await getTenantContext(member);
+  const result = await createVariationDraft(
+    { tdb, organizationId: member.organizationId, userId: member.user.id },
+    listingId,
+  );
+  if (result.status !== "created") redirect(`/anuncios?variacao=${result.status}`);
+  redirect(`/anuncios/rascunhos/${result.draftId}?nova-variacao=1`);
 }

@@ -77,6 +77,16 @@ async function Drafts({ searchParams }: Pick<PageProps<"/anuncios/rascunhos">, "
         </p>
       ) : null}
 
+      {typeof params.variacoes === "string" && /^\d+$/.test(params.variacoes) ? (
+        <p
+          role="status"
+          className="mb-4 rounded-lg border-l-4 border-success bg-success-soft px-3 py-2 text-sm text-success"
+        >
+          O anúncio tinha variações: foram criados {params.variacoes} rascunhos, um por variação,
+          todos com o mesmo nome de família. Revise cada um antes de publicar.
+        </p>
+      ) : null}
+
       {anyPublishable ? <PublishBar /> : null}
 
       {drafts.length === 0 ? (
