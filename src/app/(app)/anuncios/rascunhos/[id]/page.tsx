@@ -7,17 +7,11 @@ import { z } from "zod";
 import { PageHeader } from "@/components/ui/page-header";
 import { can } from "@/domain/auth/permissions";
 import { requirePermission } from "@/server/auth/session";
-import { variationLabel } from "@/domain/products/schemas";
-import {
-  draftCategoryAttributes,
-  draftFamily,
-  draftSkuOptions,
-  loadDraft,
-} from "@/server/listings/draft-service";
+import { draftCategoryAttributes, draftFamily, loadDraft } from "@/server/listings/draft-service";
 import { getTenantContext } from "@/server/tenant/tenant-db";
 
-import { deleteDraftAction, setDraftSkuAction } from "../actions";
-import { DraftEditor } from "./draft-editor";
+import { deleteDraftAction } from "../actions";
+import { ListingForm } from "./listing-form";
 
 export const metadata: Metadata = { title: "Rascunho de anúncio" };
 
@@ -37,7 +31,7 @@ export default function DraftPage({ params, searchParams }: PageProps<"/anuncios
   );
 }
 
-const CODE = /^MLBd{6,15}$/;
+const CODE = /^MLB\d{6,15}$/;
 
 async function Draft({
   params,
@@ -66,9 +60,17 @@ async function Draft({
     else sheetError = true;
   }
   const ctx = { tdb, organizationId: member.organizationId, userId: member.user.id };
-  const [family, skuOptions] = await Promise.all([
+  const [family, skus, accounts] = await Promise.all([
     draft.editable ? draftFamily(ctx, id) : Promise.resolve(null),
-    draft.editable ? draftSkuOptions(tdb, id) : Promise.resolve([]),
+    // Codes suggested on the SKU fields (a new code becomes an ERP SKU on publish).
+    draft.editable
+      ? tdb.sku.findMany({ orderBy: { code: "asc" }, take: 2000, select: { code: true } })
+      : Promise.resolve([]),
+    tdb.marketplaceAccount.findMany({
+      where: { OR: [{ status: "active" }, { id: draft.account.id }] },
+      orderBy: { nickname: "asc" },
+      select: { id: true, nickname: true, listingModel: true, allowWrites: true },
+    }),
   ]);
   const newVariation = query["nova-variacao"] === "1";
   const canSeeCost = can(member.role, "financial.view");
@@ -144,77 +146,31 @@ async function Draft({
         </p>
       ) : null}
 
-      {draft.editable && draft.listing.variants.length === 0 ? (
-        <form
-          action={setDraftSkuAction.bind(null, draft.id)}
-          className="mb-5 flex max-w-4xl flex-col gap-2 rounded-xl border border-border bg-surface p-4 text-sm sm:flex-row sm:items-end"
-        >
-          <label className="flex flex-1 flex-col gap-1">
-            <span className="font-medium text-ink">SKU do ERP deste anúncio</span>
-            <select
-              name="skuId"
-              defaultValue={draft.sku?.id ?? ""}
-              className="h-10 rounded-lg border border-border bg-surface px-3 text-ink"
-            >
-              <option value="">Sem SKU (vincular depois em Mapeamento)</option>
-              {draft.sku && !skuOptions.some((sku) => sku.id === draft.sku!.id) ? (
-                <option value={draft.sku.id}>{draft.sku.code}</option>
-              ) : null}
-              {skuOptions.map((sku) => (
-                <option key={sku.id} value={sku.id}>
-                  {sku.code} · {variationLabel(sku.variation)} · estoque {sku.stockOnHand}
-                </option>
-              ))}
-            </select>
-            <span className="text-xs text-muted">
-              {skuOptions.length
-                ? "Mostrando os SKUs do mesmo produto. Ao publicar, o anúncio fica vinculado a este SKU."
-                : "Ao publicar, o anúncio fica vinculado a este SKU."}
-            </span>
-          </label>
-          <button
-            type="submit"
-            className="h-10 rounded-lg border border-border bg-surface px-4 font-medium text-ink hover:bg-surface-2"
-          >
-            Salvar SKU
-          </button>
-        </form>
-      ) : null}
-
       {sheetError ? (
         <p className="mb-5 rounded-lg border-l-4 border-signal bg-signal-soft px-3 py-2 text-sm text-signal-ink">
           Não foi possível carregar a ficha técnica da categoria agora. Recarregue a página.
         </p>
       ) : null}
 
-      <DraftEditor
+      <ListingForm
+        key={draft.updatedAt.toISOString()}
         draftId={draft.id}
-        model={draft.model}
         editable={draft.editable}
-        allowWrites={draft.account.allowWrites}
         initial={draft.listing}
         initialDefinitions={definitions}
         lastErrors={draft.status === "failed" ? draft.lastErrors : []}
         varyingIds={family?.childAttributeIds ?? []}
-        skuOptions={skuOptions.map((sku) => ({
-          id: sku.id,
-          code: sku.code,
-          label: `${sku.code} · ${variationLabel(sku.variation)} · est. ${sku.stockOnHand}`,
-        }))}
+        simpleSkuCode={draft.sku?.code ?? null}
+        skuCodes={skus.map((sku) => sku.code)}
         published={Object.fromEntries(
           Object.entries(draft.publishedVariants as Record<string, { externalId: string }>).map(
             ([key, value]) => [key, value.externalId],
           ),
         )}
-        sku={
-          draft.sku
-            ? {
-                code: draft.sku.code,
-                stockOnHand: draft.sku.stockOnHand,
-                costCents: canSeeCost ? draft.sku.costCents : null,
-              }
-            : null
-        }
+        accounts={accounts}
+        initialAccountId={draft.account.id}
+        initialSupplierUrl={draft.supplierUrl}
+        costCents={canSeeCost ? (draft.sku?.costCents ?? null) : null}
       />
     </>
   );
