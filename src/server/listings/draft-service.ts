@@ -18,6 +18,8 @@ import {
   missingForPublish,
   type CanonicalListing,
   type PublishModel,
+  variantLabel,
+  variantListing,
 } from "@/domain/listings/canonical";
 import { getConnector } from "@/server/marketplaces/config";
 import {
@@ -121,6 +123,7 @@ export async function loadDraft(tdb: TenantDb, draftId: string) {
       sourceKind: true,
       sourceExternalId: true,
       targetFamilyId: true,
+      publishedVariants: true,
       account: {
         select: {
           id: true,
@@ -285,6 +288,27 @@ export async function quoteDraftFees(
   }
 }
 
+/** What gets published: the listing itself, or one listing per variant. */
+type Unit = { key: string; label: string; listing: CanonicalListing; skuId: string | null };
+
+type PublishedVariant = { externalId: string; listingId: string | null; familyId: string | null };
+type PublishedMap = Record<string, PublishedVariant>;
+
+function unitsOf(listing: CanonicalListing, draftSkuId: string | null): Unit[] {
+  if (listing.variants.length === 0) {
+    return [{ key: "", label: "", listing, skuId: draftSkuId }];
+  }
+  return listing.variants.map((variant, index) => ({
+    key: variant.key,
+    label: variantLabel(variant, index),
+    listing: variantListing(listing, variant),
+    skuId: variant.skuId,
+  }));
+}
+
+const prefixed = (label: string, messages: string[]) =>
+  label ? messages.map((message) => `${label}: ${message}`) : messages;
+
 export type CheckResult =
   | { status: "valid"; warnings: string[] }
   | { status: "incomplete"; missing: string[] }
@@ -292,7 +316,7 @@ export type CheckResult =
   | { status: "locked" | "writes_disabled" }
   | Failure;
 
-/** Asks the marketplace to check the draft without publishing. */
+/** Asks the marketplace to check the draft (each variant still to publish) without publishing. */
 export async function validateDraft(
   ctx: Ctx,
   draftId: string,
@@ -304,36 +328,63 @@ export async function validateDraft(
   if (!draft.editable) return { status: "locked" };
   const missing = missingForPublish(draft.listing, draft.model);
   if (missing.length) return { status: "incomplete", missing };
+  const published = draft.publishedVariants as PublishedMap;
+  const warnings = new Set<string>();
+  const errors: string[] = [];
   try {
-    const { warnings } = await market.connector.validateListing(
-      market.token,
-      draft.listing,
-      draft.model,
-    );
-    await ctx.tdb.listingDraft.updateMany({
-      where: { id: draftId, status: { in: [...EDITABLE] } },
-      data: { status: "validated", lastErrors: [] },
-    });
-    return { status: "valid", warnings };
-  } catch (error) {
-    if (error instanceof MarketplaceValidationError) {
-      await ctx.tdb.listingDraft.updateMany({
-        where: { id: draftId, status: { in: [...EDITABLE] } },
-        data: { status: "failed", lastErrors: error.causes },
-      });
-      return { status: "refused", errors: error.causes };
+    for (const unit of unitsOf(draft.listing, draft.sku?.id ?? null)) {
+      if (published[unit.key]) continue;
+      try {
+        const result = await market.connector.validateListing(
+          market.token,
+          unit.listing,
+          draft.model,
+        );
+        result.warnings.forEach((warning) => warnings.add(warning));
+      } catch (error) {
+        if (!(error instanceof MarketplaceValidationError)) throw error;
+        errors.push(...prefixed(unit.label, error.causes));
+      }
     }
+  } catch (error) {
     return failureOf(error);
   }
+  await ctx.tdb.listingDraft.updateMany({
+    where: { id: draftId, status: { in: [...EDITABLE] } },
+    data: errors.length
+      ? { status: "failed", lastErrors: errors }
+      : { status: "validated", lastErrors: [] },
+  });
+  return errors.length
+    ? { status: "refused", errors }
+    : { status: "valid", warnings: [...warnings] };
 }
+
+export type VariantOutcome = {
+  label: string;
+  status: "published" | "already" | "refused" | "unconfirmed" | "not_sent";
+  externalId?: string;
+  error?: string;
+};
 
 export type PublishResult =
   | {
       status: "published";
+      /** First listing (the only one for a simple listing). */
       listingId: string;
       externalId: string;
+      /** Every listing created by this draft (one per variant). */
+      listingIds: string[];
       descriptionFailed: boolean;
-      /** "Nova variação": did the marketplace put it in the expected family? */
+      /** Did the marketplace keep the listings in one (or the expected) family? */
+      family: "same" | "different" | "unknown" | null;
+      variants: VariantOutcome[];
+    }
+  | {
+      /** Some variants published, others not (fix and publish again: only the rest goes). */
+      status: "partial";
+      listingIds: string[];
+      variants: VariantOutcome[];
       family: "same" | "different" | "unknown" | null;
     }
   | { status: "incomplete"; missing: string[] }
@@ -345,7 +396,24 @@ export type PublishResult =
 const UNCONFIRMED =
   "O Mercado Livre não confirmou a publicação. Confira em Anúncios (ou no ML) antes de publicar de novo.";
 
-/** Publishes the draft once, then imports, links to the SKU and sends the description. */
+function familyCheck(
+  familyIds: Array<string | null>,
+  target: string | null,
+  isFamily: boolean,
+): "same" | "different" | "unknown" | null {
+  if (!target && !isFamily) return null;
+  if (familyIds.length === 0) return null;
+  if (familyIds.some((id) => !id)) return "unknown";
+  const reference = target ?? familyIds[0];
+  return familyIds.every((id) => id === reference) ? "same" : "different";
+}
+
+/**
+ * Publishes the draft: the listing, or each variant still unpublished as its own
+ * listing of the same family. Each one is sent once (claim + record right after
+ * it is created; the create call is never retried automatically). Then imports,
+ * links each listing to its SKU and sends the description.
+ */
 export async function publishDraft(
   ctx: Ctx,
   draftId: string,
@@ -366,88 +434,142 @@ export async function publishDraft(
   });
   if (claimed.count !== 1) return { status: "locked" };
 
-  let created;
-  try {
-    created = await connector.publishListing(token, draft.listing, draft.model);
-  } catch (error) {
-    const refused = error instanceof MarketplaceValidationError;
-    const lost = error instanceof MarketplaceApiError;
-    await ctx.tdb.listingDraft.updateMany({
-      where: { id: draftId, status: "publishing" },
-      data: {
-        status: "failed",
-        lastErrors: refused ? error.causes : lost ? [UNCONFIRMED] : ["Erro inesperado."],
-      },
-    });
-    if (refused) return { status: "refused", errors: error.causes };
-    if (lost) return { status: "unconfirmed" };
-    return failureOf(error);
-  }
-
-  // Published: from here on, nothing may send it again.
-  await ctx.tdb.listingDraft.updateMany({
-    where: { id: draftId },
-    data: { status: "published", externalId: created.externalId, publishedAt: new Date() },
-  });
-
+  const published: PublishedMap = { ...(draft.publishedVariants as PublishedMap) };
+  const units = unitsOf(draft.listing, draft.sku?.id ?? null);
+  const outcomes: VariantOutcome[] = [];
   let descriptionFailed = false;
-  if (draft.listing.description.trim()) {
-    try {
-      await connector.updateListingDescription(
-        token,
-        created.externalId,
-        draft.listing.description,
-        false,
-      );
-    } catch {
-      descriptionFailed = true; // can be fixed later on the edit screen
-    }
-  }
+  let stopped = false;
 
-  await saveListing(
-    ctx.tdb,
-    ctx.organizationId,
-    draft.account.id,
-    draft.account.marketplace,
-    created,
-    new Date(),
-  );
-  const local = await ctx.tdb.listing.findFirst({
-    where: { marketplaceAccountId: draft.account.id, externalId: created.externalId },
-    select: { id: true },
-  });
-  if (local) {
+  for (const unit of units) {
+    if (published[unit.key]) {
+      outcomes.push({
+        label: unit.label,
+        status: "already",
+        externalId: published[unit.key]!.externalId,
+      });
+      continue;
+    }
+    if (stopped) {
+      outcomes.push({ label: unit.label, status: "not_sent" });
+      continue;
+    }
+    let created;
+    try {
+      created = await connector.publishListing(token, unit.listing, draft.model);
+    } catch (error) {
+      if (error instanceof MarketplaceValidationError) {
+        outcomes.push({ label: unit.label, status: "refused", error: error.causes.join(" ") });
+        continue;
+      }
+      if (error instanceof MarketplaceApiError) {
+        // Lost answer: stop here, so nothing is sent twice by a retry.
+        outcomes.push({ label: unit.label, status: "unconfirmed", error: UNCONFIRMED });
+        stopped = true;
+        continue;
+      }
+      await ctx.tdb.listingDraft.updateMany({
+        where: { id: draftId, status: "publishing" },
+        data: { status: "failed", lastErrors: ["Erro inesperado."], publishedVariants: published },
+      });
+      return failureOf(error);
+    }
+
+    // Recorded at once: from here on, nothing may send this variant again.
+    published[unit.key] = {
+      externalId: created.externalId,
+      listingId: null,
+      familyId: created.familyId,
+    };
     await ctx.tdb.listingDraft.updateMany({
       where: { id: draftId },
-      data: { listingId: local.id },
+      data: { publishedVariants: published },
     });
-    if (draft.sku) {
-      await ctx.tdb.skuListingMapping.upsert({
-        where: { listingId_variationKey: { listingId: local.id, variationKey: "" } },
-        create: {
-          organizationId: ctx.organizationId,
-          skuId: draft.sku.id,
-          listingId: local.id,
-          variationKey: "",
-          createdById: ctx.userId,
-        },
-        update: { skuId: draft.sku.id },
-      });
+
+    if (unit.listing.description.trim()) {
+      try {
+        await connector.updateListingDescription(
+          token,
+          created.externalId,
+          unit.listing.description,
+          false,
+        );
+      } catch {
+        descriptionFailed = true; // can be fixed later on the edit screen
+      }
     }
+    await saveListing(
+      ctx.tdb,
+      ctx.organizationId,
+      draft.account.id,
+      draft.account.marketplace,
+      created,
+      new Date(),
+    );
+    const local = await ctx.tdb.listing.findFirst({
+      where: { marketplaceAccountId: draft.account.id, externalId: created.externalId },
+      select: { id: true },
+    });
+    if (local) {
+      published[unit.key] = { ...published[unit.key]!, listingId: local.id };
+      if (unit.skuId) {
+        await ctx.tdb.skuListingMapping.upsert({
+          where: { listingId_variationKey: { listingId: local.id, variationKey: "" } },
+          create: {
+            organizationId: ctx.organizationId,
+            skuId: unit.skuId,
+            listingId: local.id,
+            variationKey: "",
+            createdById: ctx.userId,
+          },
+          update: { skuId: unit.skuId },
+        });
+      }
+    }
+    outcomes.push({ label: unit.label, status: "published", externalId: created.externalId });
   }
-  return {
-    status: "published",
-    listingId: local?.id ?? "",
-    externalId: created.externalId,
-    descriptionFailed,
-    family: !draft.targetFamilyId
-      ? null
-      : !created.familyId
-        ? "unknown"
-        : created.familyId === draft.targetFamilyId
-          ? "same"
-          : "different",
-  };
+
+  const done = units.filter((unit) => published[unit.key]);
+  const first = done[0] ? published[done[0].key]! : null;
+  const listingIds = done
+    .map((unit) => published[unit.key]!.listingId)
+    .filter((id): id is string => Boolean(id));
+  const errors = outcomes
+    .filter((outcome) => outcome.error)
+    .map((outcome) => (outcome.label ? `${outcome.label}: ${outcome.error}` : outcome.error!));
+  const allDone = done.length === units.length;
+  await ctx.tdb.listingDraft.updateMany({
+    where: { id: draftId },
+    data: {
+      status: allDone ? "published" : "failed",
+      lastErrors: errors,
+      publishedVariants: published,
+      ...(first
+        ? { externalId: first.externalId, listingId: first.listingId, publishedAt: new Date() }
+        : {}),
+    },
+  });
+
+  const family = familyCheck(
+    done.map((unit) => published[unit.key]!.familyId),
+    draft.targetFamilyId,
+    units.length > 1,
+  );
+  if (allDone && first) {
+    return {
+      status: "published",
+      listingId: first.listingId ?? "",
+      externalId: first.externalId,
+      listingIds,
+      descriptionFailed,
+      family,
+      variants: units.length > 1 ? outcomes : [],
+    };
+  }
+  if (done.length > 0) return { status: "partial", listingIds, variants: outcomes, family };
+  // Nothing published at all: same answers as a simple listing.
+  if (outcomes.some((outcome) => outcome.status === "unconfirmed"))
+    return { status: "unconfirmed" };
+  return { status: "refused", errors };
 }
 
 /** Drafts not published yet, newest first (Anúncios > Rascunhos). */

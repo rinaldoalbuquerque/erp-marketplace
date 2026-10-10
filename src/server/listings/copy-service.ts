@@ -99,6 +99,7 @@ async function acceptedAttributes(
   if (!categoryId) return null;
   try {
     const definitions = await categoryAttributes(connector, token, categoryId);
+    if (definitions.length === 0) return null; // no sheet known: keep everything
     return new Set(
       definitions.filter((definition) => !definition.readOnly).map((definition) => definition.id),
     );

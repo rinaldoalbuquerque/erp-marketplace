@@ -782,6 +782,8 @@ model ListingDraft {
   listingId            String?            @map("listing_id") @db.Uuid
   externalId           String?            @map("external_id")
   publishedAt          DateTime?          @map("published_at") @db.Timestamptz(6)
+  /// Variants already published: { [variantKey]: { externalId, listingId, familyId } }
+  publishedVariants    Json               @default("{}") @map("published_variants")
   /// Where the copy came from (reference only: copies are independent)
   sourceKind           ListingSourceKind? @map("source_kind")
   sourceExternalId     String?            @map("source_external_id")

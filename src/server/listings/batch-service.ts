@@ -199,8 +199,18 @@ export async function runBatchRound(
     const result = await publishDraft(ctx, id, deps);
     switch (result.status) {
       case "published":
-        if (result.listingId) publishedListings.push(result.listingId);
+        publishedListings.push(...result.listingIds);
         return { kind: "done" };
+      case "partial": {
+        publishedListings.push(...result.listingIds);
+        const problems = result.variants
+          .filter((variant) => variant.error)
+          .map((variant) => `${variant.label}: ${variant.error}`);
+        return {
+          kind: "failed",
+          message: `Publicadas ${result.listingIds.length} de ${result.variants.length} variantes. ${problems.join(" ")}`,
+        };
+      }
       case "locked":
         return { kind: "skipped" };
       case "incomplete":

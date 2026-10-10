@@ -120,10 +120,13 @@ export async function publishDraftAction(draftId: string): Promise<PublishResult
   if (!id.safeParse(draftId).success) return { status: "not_found" };
   try {
     const result = await publishDraft(ctx, draftId);
-    if (result.status === "published" && result.listingId) {
-      // The new listing follows the ERP stock when the account syncs stock.
+    if (
+      (result.status === "published" || result.status === "partial") &&
+      result.listingIds.length
+    ) {
+      // The new listings follow the ERP stock when the account syncs stock.
       await queueStockSync(member.organizationId, () =>
-        enqueueForListings(ctx.tdb, member.organizationId, [result.listingId]),
+        enqueueForListings(ctx.tdb, member.organizationId, result.listingIds),
       );
     }
     revalidatePath("/anuncios");

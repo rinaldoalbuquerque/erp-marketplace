@@ -7,6 +7,7 @@ import {
   MarketplaceValidationError,
   type MarketplaceListing,
 } from "@/connectors/types";
+import { emptyVariant } from "@/domain/listings/canonical";
 import { db } from "@/server/db";
 import {
   addDraftPicture,
@@ -249,5 +250,67 @@ describe("listing drafts against the database", () => {
       const result = await publishDraft(ctx(), draftId, { key, connectorFor: () => connector });
       expect(result).toMatchObject({ status: "published", family: expected });
     }
+  });
+
+  it("variants: each one becomes a listing of the family; a refused one is retried alone", async () => {
+    const draftId = await readyDraft();
+    const draft = await loadDraft(ctx().tdb, draftId);
+    const variant = (key: string, color: string, sku: string | null) => ({
+      ...emptyVariant(key),
+      attributes: [{ id: "COLOR", valueId: null, valueName: color }],
+      gtin: "7891234567895",
+      availableQuantity: 2,
+      skuId: sku,
+    });
+    await saveDraftContent(ctx().tdb, draftId, {
+      ...draft!.listing,
+      variationAttributeIds: ["COLOR"],
+      variants: [variant("a", "Azul", skuId), variant("b", "Verde", null)],
+    });
+
+    const sent: string[] = [];
+    let refuseGreen = true;
+    const connector = fakeConnector({
+      publishListing: async (_token, listing) => {
+        const color = listing.attributes.find((attribute) => attribute.id === "COLOR")?.valueName;
+        if (color === "Verde" && refuseGreen) {
+          throw new MarketplaceValidationError(["GTIN inválido."]);
+        }
+        sent.push(color ?? "?");
+        return { ...created(`MLB${Date.now()}${color}`), familyId: "F1" };
+      },
+      updateListingDescription: async () => undefined,
+    });
+    const deps = { key, connectorFor: () => connector };
+
+    const first = await publishDraft(ctx(), draftId, deps);
+    expect(first).toMatchObject({
+      status: "partial",
+      variants: [
+        { label: "Azul", status: "published" },
+        { label: "Verde", status: "refused", error: "GTIN inválido." },
+      ],
+    });
+    expect(await loadDraft(ctx().tdb, draftId)).toMatchObject({ status: "failed", editable: true });
+
+    refuseGreen = false;
+    const second = await publishDraft(ctx(), draftId, deps);
+    expect(second).toMatchObject({
+      status: "published",
+      family: "same",
+      variants: [
+        { label: "Azul", status: "already" },
+        { label: "Verde", status: "published" },
+      ],
+    });
+    expect(sent).toEqual(["Azul", "Verde"]); // Azul was never sent twice
+    expect(second.status === "published" ? second.listingIds : []).toHaveLength(2);
+
+    // The blue listing is linked to the variant's SKU.
+    const blue = await db.listing.findFirstOrThrow({
+      where: { organizationId, externalId: { endsWith: "Azul" } },
+      select: { mappings: { select: { skuId: true } } },
+    });
+    expect(blue.mappings.map((mapping) => mapping.skuId)).toEqual([skuId]);
   });
 });
