@@ -152,14 +152,18 @@ ERP para gerenciar marketplaces, começando pelo Mercado Livre, com foco em **pr
   - Simulador: tarifa do ML (`listing_prices`) nos dois tipos, quanto recebe e margem sobre o custo do SKU (sem frete/impostos).
   - Validar no ML (`/items/validate`) e Publicar (`POST /items`; User Products com `family_name` e sem título). Publica uma vez só (trava + sem nova tentativa automática); depois envia a descrição, importa, vincula ao SKU e enfileira o estoque.
   - Testado em 09/10/2026 na conta de teste: anúncio MLB7778987736 (User Products, 3 fotos, 31 atributos) publicado e importado.
-  - Ainda não: várias variações de uma vez (nova variação na família), frete por anúncio, copiar anúncio existente (2D).
+  - Tela do anúncio em seções (10/10/2026), no formato de outro ERP usado pelo dono: informação básica, atributos, Simples/Variantes (escolhe o que varia, marca as opções e as linhas são geradas), lista de variantes com SKU digitado (SKU novo é criado no ERP ao publicar), código de barras, quantidade, peso e medidas do pacote, fotos por variante ("Copiar imagens para…"), preço/tipo/garantia por variante, descrição comum ou própria. Publica variante por variante na mesma família. Ao publicar, a tela fecha e volta à lista; anúncio novo pergunta, ao salvar, se vai para Rascunhos ou fecha.
+  - Ainda não: frete por anúncio.
 - [x] **2D** Replicação, cópia de fora e migração entre contas (reaproveita formulário e rascunhos), com fila em segundo plano
   - Qualquer anúncio (seu ou de outro vendedor) vira rascunho no modelo canônico (`copy-service.ts`); anúncio seu leva o vínculo com o SKU; fotos por endereço para outras contas (ids só na mesma conta); atributos filtrados pela ficha da categoria de destino. Origem guardada só como referência.
   - Anúncios → "Copiar para…" (lote em segundo plano: conta, ajuste de preço %, arredondar para ,90, Clássico/Premium) e "Copiar anúncio de fora" (link ou MLB…, com aviso de direitos autorais).
   - Rascunhos → "Publicar selecionados" (lote em segundo plano; cada rascunho uma vez; recusas no relatório).
   - Lotes = `sync_jobs` (`replicate_listings`, `publish_drafts`) com rodadas em `after()`, progresso, retomada e relatório; um rascunho por origem em cada lote (índice único).
   - Testado em 09/10/2026: 2 anúncios da BELA copiados para a conta de teste (SKU herdado, preço +10% arredondado para ,90) e publicados em lote (MLB5360907969, MLB5360919029).
-  - Ainda não: anúncios com variações (tradicionais), criar várias variações de uma família de uma vez.
+  - Cópias mantêm as variações juntas: família UP ou anúncio tradicional com variações = um rascunho com variantes.
+- [x] Editar a família inteira (10/10/2026): na edição de um anúncio UP com variações, todas as variantes aparecem na mesma página (atributos comuns, tabela com código de barras, pacote, preço, tipo e status com "Editar em massa", fotos por variante, descrição comum ou própria) e dá para criar variantes novas lá dentro. Só o que mudou é enviado (conferindo a versão no ML); variantes novas saem por rascunho + publicação. Fotos (`PUT /items` `pictures`, substitui a lista) e tipo (`POST /items/{id}/listing_type`) também na edição simples. Testado na conta de teste.
+- [x] Excluir (10/10/2026): produtos (sem histórico = apagado; com vendas/movimentações = arquivado) e anúncios numa caixa de diálogo: "só do sistema" (some do ERP, perde vínculo, a importação não traz de volta) ou "também no Mercado Livre" (lote: finaliza e exclui, irreversível). Rascunhos: excluir na lista. Testado na conta de teste.
+- [x] Lista de anúncios: filtro de contas em lista suspensa (várias contas, botão Aplicar); ao editar, volta para a mesma lista filtrada.
 - [ ] **2E** IA: ficha técnica e descrição
 - [x] Edição em massa (preço e status)
   - Anúncios → "Editar em massa": ajustar preço em %, somar/subtrair R$, definir preço (arredondar para ,90), pausar, reativar; nos marcados ou em todos do filtro (até 500).
