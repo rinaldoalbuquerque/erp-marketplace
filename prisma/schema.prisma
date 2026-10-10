@@ -319,6 +319,9 @@ model Listing {
   /// Full marketplace payload, base for the canonical model and editing (2B).
   raw                  Json
   syncedAt             DateTime     @map("synced_at") @db.Timestamptz(6)
+  /// "Excluir só do sistema": hidden from the screens and never shown again by imports
+  /// (still on the marketplace; old orders keep pointing to it).
+  removedAt            DateTime?    @map("removed_at") @db.Timestamptz(6)
   createdAt            DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 

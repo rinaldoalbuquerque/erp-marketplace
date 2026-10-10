@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, PencilRuler } from "lucide-react";
+import { Copy, PencilRuler, Trash2 } from "lucide-react";
 import { useState, useTransition } from "react";
 
 import { LISTING_TYPES, type ListingTypeId } from "@/domain/listings/canonical";
@@ -8,6 +8,7 @@ import { LISTING_TYPES, type ListingTypeId } from "@/domain/listings/canonical";
 import { BatchProgressPanel } from "./batch-progress";
 import { BulkEditPanel, type BulkFilters } from "./bulk-edit-panel";
 import { startReplicateAction } from "./copy-actions";
+import { DeletePanel } from "./delete-panel";
 
 export const REPLICATE_FORM_ID = "replicate-form";
 
@@ -34,11 +35,15 @@ export function ReplicateBar({
   accounts,
   filters,
   filterTotal,
+  canDelete = false,
 }: {
   accounts: Array<{ id: string; nickname: string }>;
   filters: BulkFilters;
   filterTotal: number;
+  /** Owner/admin: may delete listings. */
+  canDelete?: boolean;
 }) {
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [open, setOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
@@ -107,6 +112,7 @@ export function ReplicateBar({
             onClick={() => {
               setOpen((value) => !value);
               setBulkOpen(false);
+              setDeleteOpen(false);
             }}
             className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3 font-medium text-ink hover:bg-surface-2"
           >
@@ -118,12 +124,27 @@ export function ReplicateBar({
             onClick={() => {
               setBulkOpen((value) => !value);
               setOpen(false);
+              setDeleteOpen(false);
             }}
             className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3 font-medium text-ink hover:bg-surface-2"
           >
             <PencilRuler className="size-4" aria-hidden="true" />
             Editar em massa
           </button>
+          {canDelete ? (
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteOpen((value) => !value);
+                setOpen(false);
+                setBulkOpen(false);
+              }}
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-surface px-3 font-medium text-ink hover:bg-surface-2"
+            >
+              <Trash2 className="size-4" aria-hidden="true" />
+              Excluir
+            </button>
+          ) : null}
           {message ? <span className="text-signal-ink">{message}</span> : null}
         </div>
         {open ? (
@@ -192,6 +213,7 @@ export function ReplicateBar({
         {bulkOpen ? (
           <BulkEditPanel filters={filters} filterTotal={filterTotal} selectedIds={checkedIds} />
         ) : null}
+        {deleteOpen ? <DeletePanel selectedIds={checkedIds} /> : null}
       </form>
     </>
   );

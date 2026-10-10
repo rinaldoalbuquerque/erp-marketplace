@@ -33,7 +33,7 @@ const UNMAPPED: Prisma.ListingWhereInput = {
 
 export async function listMappingRows(tdb: TenantDb, filters: MappingFilters) {
   const page = Math.max(1, filters.page ?? 1);
-  const conditions: Prisma.ListingWhereInput[] = [];
+  const conditions: Prisma.ListingWhereInput[] = [{ removedAt: null }];
   if (!filters.showMapped) conditions.push(UNMAPPED);
   if (filters.accountIds?.length) {
     conditions.push({ marketplaceAccountId: { in: filters.accountIds } });
@@ -161,7 +161,7 @@ export async function autoMatch(
   const [skus, listings] = await Promise.all([
     tdb.sku.findMany({ select: { id: true, code: true } }),
     tdb.listing.findMany({
-      where: UNMAPPED,
+      where: { ...UNMAPPED, removedAt: null },
       select: {
         id: true,
         sellerSku: true,

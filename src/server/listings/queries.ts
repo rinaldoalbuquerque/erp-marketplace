@@ -27,7 +27,8 @@ export type ListingFilters = {
 };
 
 export function listingWhere(filters: ListingFilters): Prisma.ListingWhereInput {
-  const where: Prisma.ListingWhereInput = {};
+  // Listings removed from the system never show up again.
+  const where: Prisma.ListingWhereInput = { removedAt: null };
   if (filters.accountIds?.length) where.marketplaceAccountId = { in: filters.accountIds };
   if (filters.status) Object.assign(where, LISTING_STATUS_FILTERS[filters.status]);
   if (filters.familyId) where.familyId = filters.familyId;

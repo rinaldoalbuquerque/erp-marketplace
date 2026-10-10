@@ -3,12 +3,13 @@ import { describe, expect, it } from "vitest";
 import { listingWhere } from "@/server/listings/queries";
 
 describe("listingWhere", () => {
-  it("has no filter by default", () => {
-    expect(listingWhere({})).toEqual({});
+  it("only hides listings removed from the system by default", () => {
+    expect(listingWhere({})).toEqual({ removedAt: null });
   });
 
   it("filters by accounts, status and family", () => {
     expect(listingWhere({ accountIds: ["a", "b"], status: "pausado", familyId: "F1" })).toEqual({
+      removedAt: null,
       marketplaceAccountId: { in: ["a", "b"] },
       status: "paused",
       familyId: "F1",
@@ -16,11 +17,14 @@ describe("listingWhere", () => {
   });
 
   it("'sem estoque' filters by quantity, not status", () => {
-    expect(listingWhere({ status: "sem-estoque" })).toEqual({ availableQuantity: 0 });
+    expect(listingWhere({ status: "sem-estoque" })).toEqual({
+      removedAt: null,
+      availableQuantity: 0,
+    });
   });
 
   it("only unmapped listings", () => {
-    expect(listingWhere({ unmapped: true })).toEqual({ mappings: { none: {} } });
+    expect(listingWhere({ unmapped: true })).toEqual({ removedAt: null, mappings: { none: {} } });
   });
 
   it("searches title, SKU, family and the MLB id (normalized)", () => {
@@ -35,6 +39,6 @@ describe("listingWhere", () => {
   });
 
   it("ignores a blank search", () => {
-    expect(listingWhere({ search: "   " })).toEqual({});
+    expect(listingWhere({ search: "   " })).toEqual({ removedAt: null });
   });
 });

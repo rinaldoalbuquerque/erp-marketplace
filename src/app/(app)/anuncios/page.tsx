@@ -261,6 +261,7 @@ async function Listings({ searchParams }: Pick<PageProps<"/anuncios">, "searchPa
             familyId: familyId || undefined,
           }}
           filterTotal={result.total}
+          canDelete={can(member.role, "listings.delete")}
         />
       ) : null}
 
