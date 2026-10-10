@@ -121,6 +121,10 @@ export type EditInput = {
   status?: "active" | "paused" | "closed";
   description?: string;
   attributes?: Record<string, AttributeInput>;
+  /** Picture ids in order (the full new set; new ones uploaded before). */
+  pictureIds?: string[];
+  /** Listing type, e.g. gold_special (Clássico) or gold_pro (Premium). */
+  listingTypeId?: string;
 };
 
 type Change = { field: string; before: unknown; after: unknown };
@@ -157,6 +161,7 @@ export function buildPatch(
 ): {
   patch: ListingPatch;
   description?: string;
+  listingTypeId?: string;
   changes: Change[];
   fieldErrors: Record<string, string>;
 } {
@@ -209,6 +214,24 @@ export function buildPatch(
     }
   }
 
+  if (input.pictureIds !== undefined) {
+    const current = (fresh.pictures ?? []).map((picture) => picture.id);
+    const next = input.pictureIds;
+    if (next.join("|") !== current.join("|")) {
+      if (next.length === 0) fieldErrors.pictures = "O anúncio precisa de ao menos uma foto.";
+      else {
+        patch.pictures = next;
+        changes.push({ field: "pictures", before: current, after: next });
+      }
+    }
+  }
+
+  let listingTypeId: string | undefined;
+  if (input.listingTypeId !== undefined && input.listingTypeId !== listing.listingTypeId) {
+    listingTypeId = input.listingTypeId;
+    changes.push({ field: "listingType", before: listing.listingTypeId, after: listingTypeId });
+  }
+
   if (input.attributes) {
     const diff = diffAttributes(definitions, fresh.attributes, input.attributes);
     Object.assign(
@@ -228,7 +251,7 @@ export function buildPatch(
       }
     }
   }
-  return { patch, description, changes, fieldErrors };
+  return { patch, description, listingTypeId, changes, fieldErrors };
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -242,8 +265,21 @@ const STATUS_LABELS: Record<string, string> = {
  * automation; status depending on stock/moderation). Compared with the item
  * read back after saving.
  */
-export function checkApplied(patch: ListingPatch, after: EditableListing): string[] {
+export function checkApplied(
+  patch: ListingPatch,
+  after: EditableListing,
+  listingTypeId?: string,
+): string[] {
   const missing: string[] = [];
+  if (
+    patch.pictures !== undefined &&
+    (after.pictures ?? []).map((picture) => picture.id).join("|") !== patch.pictures.join("|")
+  ) {
+    missing.push("As fotos não ficaram como enviadas (confira no Mercado Livre).");
+  }
+  if (listingTypeId !== undefined && after.listing.listingTypeId !== listingTypeId) {
+    missing.push("O tipo do anúncio não mudou no Mercado Livre.");
+  }
   if (patch.priceCents !== undefined && after.listing.priceCents !== patch.priceCents) {
     missing.push(
       "O preço não foi alterado pelo Mercado Livre (anúncio com automatização de preços ou regra da conta).",
@@ -314,6 +350,15 @@ export async function saveEdit(
       built.patch,
     );
     const notApplied: string[] = [];
+    if (built.listingTypeId !== undefined) {
+      try {
+        await connector.changeListingType(token, target.externalId, built.listingTypeId);
+      } catch (error) {
+        if (error instanceof MarketplaceValidationError) {
+          notApplied.push(`Tipo do anúncio não alterado: ${error.causes.join("; ")}`);
+        } else throw error;
+      }
+    }
     if (built.description !== undefined) {
       try {
         await connector.updateListingDescription(
@@ -340,7 +385,10 @@ export async function saveEdit(
       after.listing,
       new Date(),
     );
-    notApplied.push(...checkApplied(built.patch, after));
+    const typeRefused = notApplied.some((item) => item.startsWith("Tipo do anúncio"));
+    notApplied.push(
+      ...checkApplied(built.patch, after, typeRefused ? undefined : built.listingTypeId),
+    );
 
     await record(
       ctx,

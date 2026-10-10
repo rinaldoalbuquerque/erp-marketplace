@@ -1,6 +1,7 @@
 import type { MarketplaceConnector } from "../types";
 import { deleteListing } from "./deleting";
 import {
+  changeListingType,
   getCategoryAttributes,
   getListingForEdit,
   setListingStock,
@@ -74,6 +75,8 @@ export function createMercadoLivreConnector(
       publishListing(fetchFn, accessToken, listing, model),
     updateListingDescription: (accessToken, externalId, text, exists) =>
       updateListingDescription(fetchFn, accessToken, externalId, text, exists),
+    changeListingType: (accessToken, externalId, listingTypeId) =>
+      changeListingType(fetchFn, accessToken, externalId, listingTypeId),
     deleteListing: (accessToken, externalId, options) =>
       deleteListing(fetchFn, accessToken, externalId, options),
   };

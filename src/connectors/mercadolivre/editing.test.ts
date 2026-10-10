@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   causeMessages,
+  changeListingType,
   getListingForEdit,
   normalizeCategoryAttributes,
   setListingStock,
@@ -171,6 +172,22 @@ describe("getListingForEdit", () => {
     expect(causeMessages({ code: "item.title.invalid" })).toEqual(["item.title.invalid"]);
     expect(causeMessages("texto")).toEqual(["texto"]);
     expect(causeMessages(null)).toEqual([]);
+  });
+});
+
+describe("pictures and listing type", () => {
+  it("sends the pictures as the full ordered list of ids", () => {
+    expect(toItemBody({ pictures: ["P2", "P1"] })).toEqual({
+      pictures: [{ id: "P2" }, { id: "P1" }],
+    });
+  });
+
+  it("changes the listing type with POST /items/{id}/listing_type", async () => {
+    const fetchFn = fakeFetch({ "POST /items/MLB1/listing_type": { status: 200, body: {} } });
+    await changeListingType(fetchFn, "t", "MLB1", "gold_pro");
+    const { init } = callOf(fetchFn);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toEqual({ id: "gold_pro" });
   });
 });
 

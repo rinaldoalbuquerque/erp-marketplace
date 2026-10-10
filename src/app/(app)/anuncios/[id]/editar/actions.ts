@@ -31,6 +31,8 @@ const payloadSchema = z.object({
   status: z.enum(["active", "paused", "closed"]).optional(),
   description: z.string().max(50_000).optional(),
   attributes: z.record(z.string(), attributeInput).optional(),
+  pictureIds: z.array(z.string().min(1).max(100)).max(12).optional(),
+  listingTypeId: z.enum(["gold_special", "gold_pro"]).optional(),
 });
 
 export type EditPayload = z.infer<typeof payloadSchema>;

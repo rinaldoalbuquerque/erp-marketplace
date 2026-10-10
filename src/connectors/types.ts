@@ -252,6 +252,8 @@ export interface MarketplaceConnector {
   getCategoryAttributes(accessToken: string, categoryId: string): Promise<AttributeDefinition[]>;
   /** Fresh copy of one listing for editing (incl. attribute values and description). */
   getListingForEdit(accessToken: string, externalId: string): Promise<EditableListing>;
+  /** Changes the listing type (e.g. Clássico <-> Premium). */
+  changeListingType(accessToken: string, externalId: string, listingTypeId: string): Promise<void>;
   /** Closes (unless already closed) and deletes a listing on the marketplace. Irreversible. */
   deleteListing(
     accessToken: string,
@@ -279,6 +281,8 @@ export type EditableListing = {
   attributes: AttributeValue[];
   /** Plain text; null when the listing has no description yet. */
   description: string | null;
+  /** Current pictures, in order (the first is the main one). */
+  pictures?: Array<{ id: string; url: string | null }>;
   /** Editing rules the marketplace imposes on this listing. */
   rules: {
     titleEditable: boolean;
@@ -296,6 +300,8 @@ export type ListingPatch = {
   priceCents?: number;
   status?: "active" | "paused" | "closed";
   attributes?: AttributeValue[];
+  /** Picture ids in order: the full new set (replaces the current pictures). */
+  pictures?: string[];
 };
 
 /** The marketplace refused the request with field-level reasons (shown to the user). */

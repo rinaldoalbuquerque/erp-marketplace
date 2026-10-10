@@ -189,6 +189,16 @@ export async function getListingForEdit(
       valueName: attribute.value_name ?? null,
     }));
 
+  const pictures = z
+    .array(
+      z
+        .object({ id: z.string(), secure_url: z.string().nullish(), url: z.string().nullish() })
+        .passthrough(),
+    )
+    .catch([])
+    .parse(body.pictures ?? [])
+    .map((picture) => ({ id: picture.id, url: picture.secure_url ?? picture.url ?? null }));
+
   const descriptionResponse = await mlFetch(fetchFn, `${ML_API_BASE}/items/${id}/description`, {
     headers: bearer(accessToken),
   });
@@ -205,6 +215,7 @@ export async function getListingForEdit(
     listing,
     attributes,
     description,
+    pictures,
     rules: {
       // Title: never on User Products; on traditional items only before the first sale.
       titleEditable: !isUserProducts && (listing.soldQuantity ?? 0) === 0,
@@ -228,6 +239,10 @@ export function toItemBody(patch: ListingPatch): Record<string, unknown> {
   if (patch.familyName !== undefined) body.family_name = patch.familyName;
   if (patch.priceCents !== undefined) body.price = patch.priceCents / 100;
   if (patch.status !== undefined) body.status = patch.status;
+  // The list replaces the item's pictures (ids uploaded before, in order).
+  // https://developers.mercadolibre.com.ar/en_us/working-with-pictures
+  if (patch.pictures?.length)
+    body.pictures = patch.pictures.map((pictureId) => ({ id: pictureId }));
   if (patch.attributes?.length) {
     body.attributes = patch.attributes.map((attribute) => ({
       id: attribute.id,
@@ -324,4 +339,28 @@ export async function setListingStock(
     },
   );
   if (!response.ok) await failure(response, "Stock update");
+}
+
+/**
+ * Listing type of a published item: POST /items/{id}/listing_type { "id": "gold_pro" }.
+ * The docs disagree on whether it can change more than once; a refusal comes
+ * back as MarketplaceValidationError with the marketplace's reason.
+ * https://developers.mercadolibre.com.ar/en_us/listing-types-item-upgrades-tutorial
+ */
+export async function changeListingType(
+  fetchFn: FetchFn,
+  accessToken: string,
+  externalId: string,
+  listingTypeId: string,
+): Promise<void> {
+  const response = await mlFetch(
+    fetchFn,
+    `${ML_API_BASE}/items/${encodeURIComponent(externalId)}/listing_type`,
+    {
+      method: "POST",
+      headers: { ...bearer(accessToken), "content-type": "application/json" },
+      body: JSON.stringify({ id: listingTypeId }),
+    },
+  );
+  if (!response.ok) await failure(response, "Listing type change");
 }

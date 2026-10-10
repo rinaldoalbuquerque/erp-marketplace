@@ -302,6 +302,73 @@ describe("listing edit against the database", () => {
     );
   });
 
+  it("replaces the pictures (full ordered list) and changes the listing type", async () => {
+    const state = {
+      listing: marketplaceListing(),
+      description: null as string | null,
+      pictures: [
+        { id: "A", url: null },
+        { id: "B", url: null },
+      ],
+    };
+    const sim = setup(state);
+    const types: string[] = [];
+    sim.connector.getListingForEdit = async () => ({
+      listing: state.listing,
+      attributes: [],
+      description: null,
+      pictures: state.pictures,
+      rules: { titleEditable: true, familyNameEditable: false, titleLockReason: null },
+    });
+    sim.connector.updateListing = async (_token, _id, patch) => {
+      sim.updates.push(patch);
+      if (patch.pictures) state.pictures = patch.pictures.map((id) => ({ id, url: null }));
+      return { warnings: [] };
+    };
+    sim.connector.changeListingType = async (_token, _id, type) => {
+      types.push(type);
+      state.listing = { ...state.listing, listingTypeId: type };
+    };
+    const deps = { key, connectorFor: () => sim.connector };
+
+    // Same pictures in the same order: nothing to send.
+    expect(
+      await saveEdit(ctx(), listingId, { versionStamp: STAMP, pictureIds: ["A", "B"] }, deps),
+    ).toEqual({ status: "no_changes" });
+
+    const result = await saveEdit(
+      ctx(),
+      listingId,
+      { versionStamp: STAMP, pictureIds: ["NEW", "A"], listingTypeId: "gold_pro" },
+      deps,
+    );
+    expect(result).toMatchObject({ status: "saved", notApplied: [] });
+    expect(sim.updates).toEqual([{ pictures: ["NEW", "A"] }]);
+    expect(types).toEqual(["gold_pro"]);
+
+    // No pictures at all is refused before reaching the marketplace.
+    expect(
+      await saveEdit(ctx(), listingId, { versionStamp: STAMP, pictureIds: [] }, deps),
+    ).toMatchObject({ status: "invalid", fieldErrors: { pictures: expect.any(String) } });
+  });
+
+  it("a listing type the marketplace refuses is reported, the rest is saved", async () => {
+    const sim = setup({ listing: marketplaceListing(), description: null });
+    sim.connector.changeListingType = async () => {
+      throw new MarketplaceValidationError(["Listing type can only be changed once."]);
+    };
+    const result = await saveEdit(
+      ctx(),
+      listingId,
+      { versionStamp: STAMP, priceCents: 2500, listingTypeId: "gold_pro" },
+      { key, connectorFor: () => sim.connector },
+    );
+    expect(result).toMatchObject({
+      status: "saved",
+      notApplied: ["Tipo do anúncio não alterado: Listing type can only be changed once."],
+    });
+  });
+
   it("another organization can't load or edit the listing", async () => {
     const sim = setup({ listing: marketplaceListing(), description: null });
     const foreign = {
