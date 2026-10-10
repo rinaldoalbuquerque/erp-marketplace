@@ -259,6 +259,12 @@ export function FamilyEditForm({
     );
   }
 
+  /** Package value suggested for a new variant: the first variant that has it. */
+  const knownPackage = (id: string) =>
+    Object.values(rows)
+      .map((row) => row.attributes[id]?.value.trim() ?? "")
+      .find(Boolean) ?? "";
+
   function addVariant() {
     const template = newRows[0];
     setNewRows((current) => [
@@ -270,10 +276,10 @@ export function FamilyEditForm({
         gtin: "",
         quantity: "0",
         price: template?.price ?? rows[first.listingId]?.price ?? "",
-        weight: template?.weight ?? rows[first.listingId]?.attributes[PACKAGE.weight]?.value ?? "",
-        height: template?.height ?? rows[first.listingId]?.attributes[PACKAGE.height]?.value ?? "",
-        width: template?.width ?? rows[first.listingId]?.attributes[PACKAGE.width]?.value ?? "",
-        length: template?.length ?? rows[first.listingId]?.attributes[PACKAGE.length]?.value ?? "",
+        weight: template?.weight ?? knownPackage(PACKAGE.weight),
+        height: template?.height ?? knownPackage(PACKAGE.height),
+        width: template?.width ?? knownPackage(PACKAGE.width),
+        length: template?.length ?? knownPackage(PACKAGE.length),
         listingTypeId: DEFAULT_LISTING_TYPE,
         pictures: [],
       },
@@ -379,9 +385,13 @@ export function FamilyEditForm({
       const quantity = Number(row.quantity || "0");
       if (!Number.isInteger(quantity) || quantity < 0) errors.push(`${name}: quantidade inválida.`);
       if (row.pictures.length === 0) errors.push(`${name}: adicione ao menos uma foto.`);
-      const int = (value: string) => {
+      // Whole numbers (grams / cm); a typed value in another format is reported, never dropped.
+      const int = (value: string, label: string) => {
         const trimmed = value.trim();
-        return /^\d+$/.test(trimmed) && Number(trimmed) > 0 ? Number(trimmed) : null;
+        if (!trimmed) return null;
+        if (/^\d+$/.test(trimmed) && Number(trimmed) > 0) return Number(trimmed);
+        errors.push(`${name}: ${label} deve ser um número inteiro (ex.: 500).`);
+        return null;
       };
       variants.push({
         key: row.key,
@@ -405,10 +415,10 @@ export function FamilyEditForm({
         description: null,
         package: {
           ...EMPTY_PACKAGE,
-          weightG: int(row.weight),
-          heightCm: int(row.height),
-          widthCm: int(row.width),
-          lengthCm: int(row.length),
+          weightG: int(row.weight, "peso (g)"),
+          heightCm: int(row.height, "altura (cm)"),
+          widthCm: int(row.width, "largura (cm)"),
+          lengthCm: int(row.length, "comprimento (cm)"),
         },
       });
     }
