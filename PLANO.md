@@ -161,7 +161,12 @@ ERP para gerenciar marketplaces, começando pelo Mercado Livre, com foco em **pr
   - Testado em 09/10/2026: 2 anúncios da BELA copiados para a conta de teste (SKU herdado, preço +10% arredondado para ,90) e publicados em lote (MLB5360907969, MLB5360919029).
   - Ainda não: anúncios com variações (tradicionais), criar várias variações de uma família de uma vez.
 - [ ] **2E** IA: ficha técnica e descrição
-- [ ] Edição em massa (pode entrar junto da 2B/2D)
+- [x] Edição em massa (preço e status)
+  - Anúncios → "Editar em massa": ajustar preço em %, somar/subtrair R$, definir preço (arredondar para ,90), pausar, reativar; nos marcados ou em todos do filtro (até 500).
+  - Prévia (atual → novo, mudanças > 30% em destaque, motivos dos pulados) e lote em segundo plano (`sync_jobs` `bulk_edit_listings`).
+  - Valores finais calculados antes (retomar não aplica de novo); conferência no ML antes de enviar (mudou desde a prévia → não sobrescreve); histórico em `listing_edits`; "Desfazer" cria um lote com os valores anteriores.
+  - Testado em 10/10/2026 na conta de teste: %, R$, pausar e reativar.
+  - Ainda não: atributos/descrição em massa (cada categoria tem sua ficha); estoque fica com a sincronização do ERP; finalizar em massa (irreversível).
 
 ### Fase 3 — Pedidos
 - [x] **3A** Receber pedidos e envios por notificação (webhook), com consulta periódica de reforço
