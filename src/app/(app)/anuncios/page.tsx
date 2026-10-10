@@ -17,6 +17,7 @@ import {
 import { getTenantContext } from "@/server/tenant/tenant-db";
 
 import { createVariationAction } from "./copy-actions";
+import { AccountPicker } from "./account-picker";
 import { REPLICATE_FORM_ID, ReplicateBar } from "./replicate-bar";
 
 const VARIATION_ERRORS: Record<string, string> = {
@@ -194,6 +195,17 @@ async function Listings({ searchParams }: Pick<PageProps<"/anuncios">, "searchPa
               </option>
             ))}
           </select>
+          {accounts.length > 1 ? (
+            <AccountPicker
+              accounts={accounts.map((account) => ({ id: account.id, nickname: account.nickname }))}
+              selected={accountIds}
+              baseQuery={query({ conta: null, pagina: null }).replace(/^\/anuncios\??/, "")}
+            />
+          ) : null}
+          {accountIds.map((id) => (
+            // Keeps the chosen accounts when searching.
+            <input key={id} type="hidden" name="conta" value={id} />
+          ))}
           <button
             type="submit"
             className="h-10 rounded-lg bg-brand px-4 text-sm font-semibold text-on-brand hover:bg-brand-hover"
@@ -201,23 +213,6 @@ async function Listings({ searchParams }: Pick<PageProps<"/anuncios">, "searchPa
             Filtrar
           </button>
         </div>
-        {accounts.length > 1 ? (
-          <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-            <legend className="sr-only">Contas</legend>
-            <span className="text-muted">Contas:</span>
-            {accounts.map((account) => (
-              <label key={account.id} className="flex items-center gap-1.5 text-ink">
-                <input
-                  type="checkbox"
-                  name="conta"
-                  value={account.id}
-                  defaultChecked={accountIds.includes(account.id)}
-                />
-                {account.nickname}
-              </label>
-            ))}
-          </fieldset>
-        ) : null}
         {familyId ? (
           <p className="text-sm text-muted">
             Mostrando uma família.{" "}
@@ -357,7 +352,7 @@ async function Listings({ searchParams }: Pick<PageProps<"/anuncios">, "searchPa
                             ) : null}
                             {canEdit && listing.account.allowWrites ? (
                               <Link
-                                href={`/anuncios/${listing.id}/editar`}
+                                href={`/anuncios/${listing.id}/editar?voltar=${encodeURIComponent(query({}))}`}
                                 className="inline-flex items-center gap-0.5 font-medium text-brand hover:underline"
                               >
                                 <Pencil className="size-3" aria-hidden="true" />

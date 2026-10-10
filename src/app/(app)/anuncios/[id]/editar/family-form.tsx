@@ -159,6 +159,7 @@ export function FamilyEditForm({
   varyingIds,
   members,
   skuCodes,
+  returnTo,
 }: {
   listingId: string;
   familyName: string;
@@ -167,6 +168,8 @@ export function FamilyEditForm({
   varyingIds: string[];
   members: FamilyMemberInitial[];
   skuCodes: string[];
+  /** Listings page to go back to (same filters). */
+  returnTo: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -520,7 +523,7 @@ export function FamilyEditForm({
       const result = await saveFamilyAction(listingId, input);
       const { ok, lines } = report(result);
       if (ok) {
-        router.push("/anuncios?aviso=editado");
+        router.push(`${returnTo}${returnTo.includes("?") ? "&" : "?"}aviso=editado`);
         return;
       }
       setMessage({ tone: "signal", lines: ["Resultado por variante:", ...lines] });

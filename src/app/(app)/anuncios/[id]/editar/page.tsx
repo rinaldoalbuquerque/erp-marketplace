@@ -38,21 +38,39 @@ const EDIT_STATUS = {
   failed: { label: "Recusado", className: "text-danger" },
 } as const;
 
-export default function EditListingPage({ params }: PageProps<"/anuncios/[id]/editar">) {
+/** The listings page the user came from (same filters), or the plain list. */
+function returnPath(value: string | string[] | undefined): string {
+  if (typeof value !== "string" || !/^\/anuncios(\?|$)/.test(value)) return "/anuncios";
+  const [path, search = ""] = value.split("?");
+  const query = new URLSearchParams(search);
+  query.delete("aviso");
+  query.delete("mlb");
+  const text = query.toString();
+  return text ? `${path}?${text}` : path!;
+}
+
+export default function EditListingPage({
+  params,
+  searchParams,
+}: PageProps<"/anuncios/[id]/editar">) {
   return (
     <Suspense
       fallback={<p className="text-sm text-muted">Buscando a versão atual no Mercado Livre…</p>}
     >
-      <EditListing params={params} />
+      <EditListing params={params} searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function EditListing({ params }: Pick<PageProps<"/anuncios/[id]/editar">, "params">) {
+async function EditListing({
+  params,
+  searchParams,
+}: Pick<PageProps<"/anuncios/[id]/editar">, "params" | "searchParams">) {
   const member = await requirePermission("listings.edit");
   const { tdb } = await getTenantContext(member);
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) notFound();
+  const returnTo = returnPath((await searchParams).voltar);
 
   // A listing of a User Products family: every variant on this same page.
   const family = await loadFamilyForEdit(
@@ -65,7 +83,14 @@ async function EditListing({ params }: Pick<PageProps<"/anuncios/[id]/editar">, 
       take: 2000,
       select: { code: true },
     });
-    return <FamilyPage listingId={id} family={family} skuCodes={skus.map((sku) => sku.code)} />;
+    return (
+      <FamilyPage
+        listingId={id}
+        family={family}
+        skuCodes={skus.map((sku) => sku.code)}
+        returnTo={returnTo}
+      />
+    );
   }
 
   const result = await loadForEdit(
@@ -87,7 +112,7 @@ async function EditListing({ params }: Pick<PageProps<"/anuncios/[id]/editar">, 
     } as const;
     return (
       <>
-        <PageHeader title="Editar anúncio" back={{ href: "/anuncios", label: "Anúncios" }} />
+        <PageHeader title="Editar anúncio" back={{ href: returnTo, label: "Anúncios" }} />
         <div className="rounded-xl border-l-4 border-signal bg-signal-soft p-5 text-sm text-signal-ink">
           <p>{messages[result.status]}</p>
           <div className="mt-3">
@@ -158,7 +183,7 @@ async function EditListing({ params }: Pick<PageProps<"/anuncios/[id]/editar">, 
             ) : null}
           </span>
         }
-        back={{ href: "/anuncios", label: "Anúncios" }}
+        back={{ href: returnTo, label: "Anúncios" }}
       />
 
       <div className="mb-5 flex items-center gap-3 rounded-xl border border-border bg-surface p-4">
@@ -189,6 +214,7 @@ async function EditListing({ params }: Pick<PageProps<"/anuncios/[id]/editar">, 
         definitions={definitions}
         rules={editable.rules}
         canClose={can(member.role, "listings.delete")}
+        returnTo={returnTo}
       />
 
       {history[0] ? (
@@ -248,10 +274,12 @@ function FamilyPage({
   listingId,
   family,
   skuCodes,
+  returnTo,
 }: {
   listingId: string;
   family: Extract<LoadFamilyResult, { status: "ok" }>;
   skuCodes: string[];
+  returnTo: string;
 }) {
   const editableDefinitions = family.definitions.filter((definition) => !definition.readOnly);
   const members: FamilyMemberInitial[] = family.members.map((member) => {
@@ -301,7 +329,7 @@ function FamilyPage({
             ) : null}
           </span>
         }
-        back={{ href: "/anuncios", label: "Anúncios" }}
+        back={{ href: returnTo, label: "Anúncios" }}
       />
       <FamilyEditForm
         key={members.map((member) => member.versionStamp).join("|")}
@@ -312,6 +340,7 @@ function FamilyPage({
         varyingIds={family.varyingIds}
         members={members}
         skuCodes={skuCodes}
+        returnTo={returnTo}
       />
     </>
   );

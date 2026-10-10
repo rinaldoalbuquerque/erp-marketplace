@@ -42,12 +42,15 @@ export function EditListingForm({
   definitions,
   rules,
   canClose,
+  returnTo = "/anuncios",
 }: {
   listingId: string;
   initial: EditFormInitial;
   definitions: AttributeDefinition[];
   rules: EditableListing["rules"];
   canClose: boolean;
+  /** Listings page to go back to (same filters). */
+  returnTo?: string;
 }) {
   const router = useRouter();
   const [title, setTitle] = useState(initial.title);
@@ -105,7 +108,7 @@ export function EditListingForm({
         case "saved": {
           // Everything applied: close and go back to the listings (partial results stay here).
           if (!result.notApplied.length) {
-            router.push("/anuncios?aviso=editado");
+            router.push(`${returnTo}${returnTo.includes("?") ? "&" : "?"}aviso=editado`);
             return;
           }
           const notices = result.notices.length
