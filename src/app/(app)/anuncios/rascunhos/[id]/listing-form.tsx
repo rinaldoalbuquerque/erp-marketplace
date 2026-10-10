@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
 import { AttributeField } from "@/components/listings/attribute-field";
+import { shrinkImage } from "@/components/listings/shrink-image";
 import type { CategorySuggestion, FeeQuote } from "@/connectors/types";
 import {
   attributeIdsInErrors,
@@ -68,7 +69,6 @@ export type AccountOption = {
 };
 
 const FAMILY_NAME_MAX = 60; // ML max_title_length in most domains
-const MAX_SIDE = 1920; // ML keeps pictures up to 1920 px
 const WARRANTY_TYPES = ["Garantia do vendedor", "Garantia de fábrica", "Sem garantia"];
 
 const OUTCOME_TEXT = {
@@ -92,22 +92,6 @@ const FAILURES: Record<string, string> = {
 
 const outcomeLine = (variant: VariantOutcome) =>
   `• ${variant.label}: ${OUTCOME_TEXT[variant.status]}${variant.externalId ? ` (${variant.externalId})` : ""}${variant.error ? ` — ${variant.error}` : ""}`;
-
-/** Resizes a picture in the browser (keeps uploads small; ML resizes above 1920 px anyway). */
-async function shrink(file: File): Promise<Blob> {
-  const bitmap = await createImageBitmap(file).catch(() => null);
-  if (!bitmap) return file;
-  const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
-  if (scale === 1 && file.size < 3 * 1024 * 1024) return file;
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, "image/jpeg", 0.9),
-  );
-  return blob ?? file;
-}
 
 const INPUT =
   "h-9 rounded-lg border border-border bg-surface px-2 text-sm text-ink disabled:opacity-60";
@@ -660,7 +644,7 @@ export function ListingForm({
       const added: CanonicalListing["pictures"] = [];
       for (const file of [...files]) {
         const form = new FormData();
-        form.append("file", await shrink(file), file.name.replace(/\.\w+$/, ".jpg"));
+        form.append("file", await shrinkImage(file), file.name.replace(/\.\w+$/, ".jpg"));
         const result = await uploadVariantPictureAction(draftId, form);
         if (result.status !== "ok") {
           setMessage({

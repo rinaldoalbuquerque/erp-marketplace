@@ -62,7 +62,7 @@ const warrantySchema = z.object({
  * variant is published as its own listing of the same family; fields left empty
  * (price, pictures) use the listing's own.
  */
-const variantSchema = z.object({
+export const variantSchema = z.object({
   /** Local key (stable while editing; the source variation id for copies). */
   key: z.string().min(1).max(60),
   /** Values of the varying attributes (variationAttributeIds). */

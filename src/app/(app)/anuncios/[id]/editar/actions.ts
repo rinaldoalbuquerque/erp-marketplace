@@ -4,9 +4,17 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { can } from "@/domain/auth/permissions";
+import { variantSchema } from "@/domain/listings/canonical";
 import { parseBrlToCents } from "@/domain/products/money";
 import { requirePermission } from "@/server/auth/session";
 import { saveEdit, type SaveEditResult } from "@/server/listings/edit-service";
+import {
+  publishNewVariants,
+  uploadFamilyPicture,
+  type NewVariantsResult,
+} from "@/server/listings/family-edit-service";
+import { enqueueForListings } from "@/server/stock-sync/push-service";
+import { queueStockSync } from "@/server/stock-sync/schedule";
 import { getTenantContext } from "@/server/tenant/tenant-db";
 
 const attributeInput = z.object({
@@ -72,4 +80,111 @@ export async function saveListingEditAction(
     revalidatePath(`/anuncios/${listingId}/editar`);
   }
   return result;
+}
+
+// ---- Family edit (User Products: every variant on the same page) ----
+
+const familySchema = z.object({
+  members: z
+    .array(z.object({ listingId: z.uuid(), label: z.string().max(200), payload: payloadSchema }))
+    .max(30),
+  newVariants: z.array(variantSchema).max(20),
+});
+
+export type FamilyInput = z.infer<typeof familySchema>;
+
+export type FamilyMemberOutcome = { listingId: string; label: string; result: SaveEditResult };
+
+export type SaveFamilyResult =
+  | {
+      status: "done";
+      members: FamilyMemberOutcome[];
+      /** Null when no variant was added. */
+      created: NewVariantsResult | null;
+    }
+  | { status: "invalid" };
+
+/** Saves the changed variants (each one checked and recorded) and publishes the new ones. */
+export async function saveFamilyAction(
+  listingId: string,
+  input: FamilyInput,
+): Promise<SaveFamilyResult> {
+  const member = await requirePermission("listings.edit");
+  const parsed = familySchema.safeParse(input);
+  if (!z.uuid().safeParse(listingId).success || !parsed.success) return { status: "invalid" };
+  const { tdb } = await getTenantContext(member);
+  const ctx = {
+    tdb,
+    organizationId: member.organizationId,
+    userId: member.user.id,
+    canClose: false,
+  };
+
+  const members: FamilyMemberOutcome[] = [];
+  for (const item of parsed.data.members) {
+    const { price, ...rest } = item.payload;
+    const cents = price !== undefined && price.trim() !== "" ? parseBrlToCents(price) : undefined;
+    if (cents === null) {
+      members.push({
+        listingId: item.listingId,
+        label: item.label,
+        result: { status: "invalid", fieldErrors: { price: "Preço inválido. Ex.: 89,90" } },
+      });
+      continue;
+    }
+    let result: SaveEditResult;
+    try {
+      result = await saveEdit(ctx, item.listingId, { ...rest, priceCents: cents });
+    } catch (error) {
+      console.error("Family member edit failed unexpectedly", {
+        listingId: item.listingId,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      });
+      result = { status: "unexpected" };
+    }
+    members.push({ listingId: item.listingId, label: item.label, result });
+  }
+
+  let created: NewVariantsResult | null = null;
+  if (parsed.data.newVariants.length) {
+    try {
+      created = await publishNewVariants(ctx, listingId, parsed.data.newVariants, {
+        canCreateSkus: can(member.role, "products.edit"),
+      });
+      if (
+        (created.status === "published" || created.status === "partial") &&
+        created.listingIds.length
+      ) {
+        // The new listings follow the ERP stock when the account syncs stock.
+        const ids = created.listingIds;
+        await queueStockSync(member.organizationId, () =>
+          enqueueForListings(tdb, member.organizationId, ids),
+        );
+      }
+    } catch (error) {
+      console.error("Publishing new variants failed", {
+        error: error instanceof Error ? error.message : "unknown",
+      });
+      created = { status: "marketplace_error" };
+    }
+  }
+  revalidatePath("/anuncios");
+  revalidatePath(`/anuncios/${listingId}/editar`);
+  return { status: "done", members, created };
+}
+
+/** Picture of a new variant, uploaded with the account of the listing. */
+export async function uploadFamilyPictureAction(listingId: string, formData: FormData) {
+  const member = await requirePermission("listings.edit");
+  const file = formData.get("file");
+  if (!z.uuid().safeParse(listingId).success || !(file instanceof Blob)) {
+    return { status: "invalid" } as const;
+  }
+  const { tdb } = await getTenantContext(member);
+  return uploadFamilyPicture(
+    { tdb, organizationId: member.organizationId, userId: member.user.id },
+    listingId,
+    file,
+    file instanceof File ? file.name : "foto.jpg",
+  );
 }

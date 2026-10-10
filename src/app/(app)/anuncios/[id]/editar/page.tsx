@@ -10,9 +10,11 @@ import { toInput, type AttributeInput } from "@/domain/listings/attributes";
 import { centsToInput } from "@/domain/products/money";
 import { requirePermission } from "@/server/auth/session";
 import { loadForEdit } from "@/server/listings/edit-service";
+import { loadFamilyForEdit, type LoadFamilyResult } from "@/server/listings/family-edit-service";
 import { getTenantContext } from "@/server/tenant/tenant-db";
 
 import { EditListingForm, type EditFormInitial } from "./edit-form";
+import { FamilyEditForm, type FamilyMemberInitial } from "./family-form";
 
 export const metadata: Metadata = { title: "Editar anúncio" };
 
@@ -51,6 +53,20 @@ async function EditListing({ params }: Pick<PageProps<"/anuncios/[id]/editar">, 
   const { tdb } = await getTenantContext(member);
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) notFound();
+
+  // A listing of a User Products family: every variant on this same page.
+  const family = await loadFamilyForEdit(
+    { tdb, organizationId: member.organizationId, userId: member.user.id },
+    id,
+  );
+  if (family.status === "ok") {
+    const skus = await tdb.sku.findMany({
+      orderBy: { code: "asc" },
+      take: 2000,
+      select: { code: true },
+    });
+    return <FamilyPage listingId={id} family={family} skuCodes={skus.map((sku) => sku.code)} />;
+  }
 
   const result = await loadForEdit(
     {
@@ -225,5 +241,78 @@ function EditEntry({ edit }: { edit: EditRow }) {
       <span className="block text-ink">{fields.join(", ") || "—"}</span>
       {edit.message ? <span className="block text-muted">{edit.message}</span> : null}
     </div>
+  );
+}
+
+function FamilyPage({
+  listingId,
+  family,
+  skuCodes,
+}: {
+  listingId: string;
+  family: Extract<LoadFamilyResult, { status: "ok" }>;
+  skuCodes: string[];
+}) {
+  const editableDefinitions = family.definitions.filter((definition) => !definition.readOnly);
+  const members: FamilyMemberInitial[] = family.members.map((member) => {
+    const byId = new Map(member.editable.attributes.map((value) => [value.id, value]));
+    const label =
+      family.varyingIds
+        .map((attributeId) => byId.get(attributeId)?.valueName)
+        .filter(Boolean)
+        .join(" / ") || member.externalId;
+    return {
+      listingId: member.listingId,
+      externalId: member.externalId,
+      label,
+      thumbnailUrl: member.editable.listing.thumbnailUrl,
+      versionStamp: member.versionStamp,
+      skuCode: member.sku?.code ?? null,
+      stock: member.sku?.stockOnHand ?? null,
+      price: centsToInput(member.editable.listing.priceCents),
+      status: member.editable.listing.status,
+      description: member.editable.description ?? "",
+      attributes: Object.fromEntries(
+        editableDefinitions.map((definition) => [
+          definition.id,
+          toInput(definition, byId.get(definition.id)),
+        ]),
+      ),
+    };
+  });
+  const opened = family.members.find((member) => member.listingId === listingId);
+  return (
+    <>
+      <PageHeader
+        title="Editar anúncio"
+        description={
+          <span className="flex flex-wrap items-center gap-x-3">
+            <span>Família com {members.length} variantes</span>
+            <span>Conta {family.accountNickname}</span>
+            {opened?.editable.listing.permalink ? (
+              <a
+                href={opened.editable.listing.permalink}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-brand hover:underline"
+              >
+                Ver no Mercado Livre <ExternalLink className="size-3" aria-hidden="true" />
+              </a>
+            ) : null}
+          </span>
+        }
+        back={{ href: "/anuncios", label: "Anúncios" }}
+      />
+      <FamilyEditForm
+        key={members.map((member) => member.versionStamp).join("|")}
+        listingId={listingId}
+        familyName={family.familyName}
+        categoryLabel={family.members[0]?.editable.listing.categoryId ?? "—"}
+        definitions={family.definitions}
+        varyingIds={family.varyingIds}
+        members={members}
+        skuCodes={skuCodes}
+      />
+    </>
   );
 }
