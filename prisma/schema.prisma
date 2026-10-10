@@ -785,6 +785,10 @@ model ListingDraft {
   /// Where the copy came from (reference only: copies are independent)
   sourceKind           ListingSourceKind? @map("source_kind")
   sourceExternalId     String?            @map("source_external_id")
+  /// Variation of a traditional source listing ("" = whole listing)
+  sourceVariationKey   String             @default("") @map("source_variation_key")
+  /// "Nova variação": User Products family the new listing must join
+  targetFamilyId       String?            @map("target_family_id")
   /// Own account of the source listing (null for other sellers)
   sourceAccountId      String?            @map("source_account_id") @db.Uuid
   /// Batch (sync_jobs replicate_listings) that created it
@@ -801,7 +805,7 @@ model ListingDraft {
   batchJob     SyncJob?           @relation(fields: [organizationId, batchJobId], references: [organizationId, id], onDelete: NoAction)
 
   /// A batch never copies the same source twice (running it again does not duplicate)
-  @@unique([batchJobId, sourceExternalId])
+  @@unique([batchJobId, sourceExternalId, sourceVariationKey])
   @@index([organizationId, status, updatedAt])
   @@map("listing_drafts")
 }
