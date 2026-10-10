@@ -153,7 +153,6 @@ async function Draft({
       ) : null}
 
       <ListingForm
-        key={draft.updatedAt.toISOString()}
         draftId={draft.id}
         editable={draft.editable}
         initial={draft.listing}
@@ -171,6 +170,7 @@ async function Draft({
         initialAccountId={draft.account.id}
         initialSupplierUrl={draft.supplierUrl}
         costCents={canSeeCost ? (draft.sku?.costCents ?? null) : null}
+        origin={query.novo === "1" ? "new" : "list"}
       />
     </>
   );

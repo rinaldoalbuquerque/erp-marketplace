@@ -190,6 +190,7 @@ export function ListingForm({
   initialAccountId,
   initialSupplierUrl,
   costCents,
+  origin,
 }: {
   draftId: string;
   editable: boolean;
@@ -209,6 +210,8 @@ export function ListingForm({
   initialSupplierUrl: string | null;
   /** Cost of the draft's SKU (only when the member may see costs). */
   costCents: number | null;
+  /** "new": opened from Novo anúncio (closing goes to Anúncios); "list": from Rascunhos. */
+  origin: "new" | "list";
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -221,7 +224,10 @@ export function ListingForm({
 
   // Basic data
   const [accountId, setAccountId] = useState(initialAccountId);
-  const [supplierUrl, setSupplierUrl] = useState(initialSupplierUrl ?? "");
+  // Kept as it was saved (the field is no longer shown on the screen).
+  const supplierUrl = initialSupplierUrl ?? "";
+  const [askClose, setAskClose] = useState(false);
+  const listHref = origin === "new" ? "/anuncios" : "/anuncios/rascunhos";
   const [familyName, setFamilyName] = useState(initial.familyName);
   const [title, setTitle] = useState(initial.title);
   const [condition, setCondition] = useState(initial.condition);
@@ -469,6 +475,8 @@ export function ListingForm({
     startTransition(async () => {
       if (await persist(listing)) {
         setMessage({ tone: "success", lines: ["Rascunho salvo."] });
+        // New listing: ask where to go (draft list or close back to Anúncios).
+        if (origin === "new") setAskClose(true);
         router.refresh();
       }
     });
@@ -550,6 +558,12 @@ export function ListingForm({
               ? ["O Mercado Livre ainda não informou a família; confira em alguns minutos."]
               : []),
           ];
+          // All good: close the page and go back to the list (warnings keep it open).
+          if (result.family !== "different" && !result.descriptionFailed) {
+            const mlb = result.externalId ?? result.variants[0]?.externalId ?? "";
+            router.push(`${listHref}?aviso=publicado${mlb ? `&mlb=${mlb}` : ""}`);
+            return;
+          }
           setMessage(
             result.family === "different"
               ? {
@@ -834,26 +848,6 @@ export function ListingForm({
                 </option>
               ))}
             </select>
-          </FieldRow>
-          <FieldRow label="Link do fornecedor">
-            <div className="flex max-w-2xl items-center gap-2">
-              <input
-                value={supplierUrl}
-                onChange={(event) => setSupplierUrl(event.target.value)}
-                placeholder="https://… (anotação interna, não vai ao Mercado Livre)"
-                className={`${INPUT} w-full`}
-              />
-              {supplierUrl.startsWith("http") ? (
-                <a
-                  href={supplierUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-sm text-brand hover:underline"
-                >
-                  Visitar
-                </a>
-              ) : null}
-            </div>
           </FieldRow>
         </Section>
 
@@ -1695,6 +1689,38 @@ export function ListingForm({
             {message.lines.map((line, index) => (
               <p key={`${index}-${line}`}>{line}</p>
             ))}
+          </div>
+        ) : null}
+        {askClose ? (
+          <div
+            role="alertdialog"
+            aria-label="Rascunho salvo"
+            className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+          >
+            <p className="text-ink">Rascunho salvo. Para onde quer ir?</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => router.push("/anuncios/rascunhos")}
+                className="h-9 rounded-lg bg-brand px-3 font-semibold text-on-brand hover:bg-brand-hover"
+              >
+                Ir para a lista de rascunhos
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/anuncios")}
+                className="h-9 rounded-lg border border-border bg-surface px-3 font-medium text-ink hover:bg-surface-2"
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                onClick={() => setAskClose(false)}
+                className="h-9 px-2 text-muted hover:text-ink"
+              >
+                Continuar editando
+              </button>
+            </div>
           </div>
         ) : null}
         {editable ? (

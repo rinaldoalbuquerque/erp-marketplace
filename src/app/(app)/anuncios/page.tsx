@@ -231,6 +231,17 @@ async function Listings({ searchParams }: Pick<PageProps<"/anuncios">, "searchPa
         ) : null}
       </form>
 
+      {params.aviso === "publicado" || params.aviso === "editado" ? (
+        <p
+          role="status"
+          className="mb-4 rounded-lg border-l-4 border-success bg-success-soft px-3 py-2 text-sm text-success"
+        >
+          {params.aviso === "editado"
+            ? "Alterações salvas no Mercado Livre."
+            : `Anúncio publicado${typeof params.mlb === "string" && /^MLB\d{6,15}$/.test(params.mlb) ? `: ${params.mlb}` : ""}.`}
+        </p>
+      ) : null}
+
       {VARIATION_ERRORS[params.variacao as string] ? (
         <p
           role="alert"

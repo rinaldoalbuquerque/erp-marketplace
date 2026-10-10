@@ -178,11 +178,20 @@ export async function saveDraftContent(
     : "not_found";
 }
 
+/** Drafts that may be deleted: all but the ones being published right now. */
+const DELETABLE = [...EDITABLE, "published"] as const;
+
 export async function deleteDraft(tdb: TenantDb, draftId: string): Promise<boolean> {
+  return (await deleteDrafts(tdb, [draftId])) > 0;
+}
+
+/** Deletes drafts (never one in "publishing"); the published listings stay in Anúncios. */
+export async function deleteDrafts(tdb: TenantDb, draftIds: string[]): Promise<number> {
+  if (draftIds.length === 0) return 0;
   const removed = await tdb.listingDraft.deleteMany({
-    where: { id: draftId, status: { in: [...EDITABLE] } },
+    where: { id: { in: draftIds }, status: { in: [...DELETABLE] } },
   });
-  return removed.count > 0;
+  return removed.count;
 }
 
 /** Account, connector and token for marketplace calls of a draft. */

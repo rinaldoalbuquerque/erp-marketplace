@@ -10,7 +10,7 @@ import { requirePermission } from "@/server/auth/session";
 import { draftListing, listDrafts } from "@/server/listings/draft-service";
 import { getTenantContext } from "@/server/tenant/tenant-db";
 
-import { PUBLISH_FORM_ID, PublishBar } from "./publish-bar";
+import { DeleteDraftButton, PUBLISH_FORM_ID, PublishBar } from "./publish-bar";
 
 export const metadata: Metadata = { title: "Rascunhos de anúncio" };
 
@@ -33,6 +33,7 @@ const STATUS = {
 } as const;
 
 const PUBLISHABLE = new Set(["draft", "validated", "failed"]);
+const MLB = /^MLB\d{6,15}$/;
 
 export default function DraftsPage({ searchParams }: PageProps<"/anuncios/rascunhos">) {
   return (
@@ -49,7 +50,13 @@ async function Drafts({ searchParams }: Pick<PageProps<"/anuncios/rascunhos">, "
   const lote = typeof params.lote === "string" ? params.lote : "";
   const batchJobId = z.uuid().safeParse(lote).success ? lote : null;
   const drafts = await listDrafts(tdb, { batchJobId });
-  const anyPublishable = drafts.some((draft) => PUBLISHABLE.has(draft.status));
+  const mlb = typeof params.mlb === "string" && MLB.test(params.mlb) ? params.mlb : null;
+  const notice =
+    params.aviso === "publicado"
+      ? `Anúncio publicado${mlb ? `: ${mlb}` : ""}.`
+      : params.aviso === "excluido"
+        ? "Rascunho excluído."
+        : null;
 
   return (
     <>
@@ -87,7 +94,16 @@ async function Drafts({ searchParams }: Pick<PageProps<"/anuncios/rascunhos">, "
         </p>
       ) : null}
 
-      {anyPublishable ? <PublishBar /> : null}
+      {notice ? (
+        <p
+          role="status"
+          className="mb-4 rounded-lg border-l-4 border-success bg-success-soft px-3 py-2 text-sm text-success"
+        >
+          {notice}
+        </p>
+      ) : null}
+
+      {drafts.length ? <PublishBar /> : null}
 
       {drafts.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-surface p-10 text-center">
@@ -101,16 +117,17 @@ async function Drafts({ searchParams }: Pick<PageProps<"/anuncios/rascunhos">, "
           <table className="w-full text-sm">
             <thead className="border-b border-border text-left text-muted">
               <tr>
-                {anyPublishable ? (
-                  <th className="w-10 px-4 py-3">
-                    <span className="sr-only">Marcar</span>
-                  </th>
-                ) : null}
+                <th className="w-10 px-4 py-3">
+                  <span className="sr-only">Marcar</span>
+                </th>
                 <th className="px-4 py-3 font-medium">Anúncio</th>
                 <th className="px-4 py-3 font-medium">Conta</th>
                 <th className="px-4 py-3 text-right font-medium">Preço</th>
                 <th className="px-4 py-3 font-medium">Situação</th>
                 <th className="px-4 py-3 font-medium">Atualizado</th>
+                <th className="w-10 px-4 py-3">
+                  <span className="sr-only">Excluir</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -119,19 +136,18 @@ async function Drafts({ searchParams }: Pick<PageProps<"/anuncios/rascunhos">, "
                 const status = STATUS[draft.status];
                 return (
                   <tr key={draft.id} className="border-b border-border align-top last:border-0">
-                    {anyPublishable ? (
-                      <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          name="draftId"
-                          value={draft.id}
-                          form={PUBLISH_FORM_ID}
-                          disabled={!PUBLISHABLE.has(draft.status)}
-                          aria-label="Marcar rascunho"
-                          className="size-4 accent-brand disabled:opacity-30"
-                        />
-                      </td>
-                    ) : null}
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        name="draftId"
+                        value={draft.id}
+                        form={PUBLISH_FORM_ID}
+                        data-publishable={PUBLISHABLE.has(draft.status) ? "1" : "0"}
+                        disabled={draft.status === "publishing"}
+                        aria-label="Marcar rascunho"
+                        className="size-4 accent-brand disabled:opacity-30"
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <Link
                         href={`/anuncios/rascunhos/${draft.id}`}
@@ -162,6 +178,14 @@ async function Drafts({ searchParams }: Pick<PageProps<"/anuncios/rascunhos">, "
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-muted tabular-nums">
                       {DATE_TIME.format(draft.updatedAt)}
+                    </td>
+                    <td className="px-4 py-3">
+                      {draft.status !== "publishing" ? (
+                        <DeleteDraftButton
+                          draftId={draft.id}
+                          name={listing.familyName || listing.title || "Sem nome"}
+                        />
+                      ) : null}
                     </td>
                   </tr>
                 );

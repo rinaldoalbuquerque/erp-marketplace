@@ -103,6 +103,11 @@ export function EditListingForm({
       setErrors({});
       switch (result.status) {
         case "saved": {
+          // Everything applied: close and go back to the listings (partial results stay here).
+          if (!result.notApplied.length) {
+            router.push("/anuncios?aviso=editado");
+            return;
+          }
           const notices = result.notices.length
             ? [
                 "Avisos do Mercado Livre sobre este anúncio (não impediram a alteração):",

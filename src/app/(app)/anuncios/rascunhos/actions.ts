@@ -13,6 +13,7 @@ import {
   addDraftPicture,
   createDraft,
   deleteDraft,
+  deleteDrafts,
   draftCategoryAttributes,
   publishDraft,
   quoteDraftFees,
@@ -48,7 +49,7 @@ export async function createDraftAction(formData: FormData) {
     skuId: id.safeParse(skuId).success ? skuId : null,
   });
   if (result.status !== "created") redirect(`/anuncios/novo?erro=${result.status}`);
-  redirect(`/anuncios/rascunhos/${result.draftId}`);
+  redirect(`/anuncios/rascunhos/${result.draftId}?novo=1`);
 }
 
 export async function saveDraftAction(
@@ -151,7 +152,16 @@ export async function deleteDraftAction(draftId: string) {
   const { ctx } = await context();
   if (id.safeParse(draftId).success) await deleteDraft(ctx.tdb, draftId);
   revalidatePath("/anuncios/rascunhos");
-  redirect("/anuncios/rascunhos");
+  redirect("/anuncios/rascunhos?aviso=excluido&qtd=1");
+}
+
+/** Rascunhos: deletes the checked drafts. */
+export async function deleteDraftsAction(draftIds: string[]): Promise<number> {
+  const { ctx } = await context();
+  const ids = draftIds.filter((draftId) => id.safeParse(draftId).success).slice(0, 500);
+  const count = await deleteDrafts(ctx.tdb, ids);
+  revalidatePath("/anuncios/rascunhos");
+  return count;
 }
 
 export async function uploadVariantPictureAction(draftId: string, formData: FormData) {
