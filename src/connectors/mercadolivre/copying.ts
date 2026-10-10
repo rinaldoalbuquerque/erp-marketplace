@@ -83,38 +83,101 @@ export async function getListingForCopy(
   };
 }
 
-// Catalog products (pages /p/MLB...) are not listings: GET /items answers 404.
-// - GET /products/{id}: documented; buy_box_winner = listing winning the page
-//   https://developers.mercadolivre.com.br/pt_br/buscador-de-produtos
-//   https://developers.mercadolivre.com.br/pt_br/concorrencia-em-catalogo
-// - GET /products/{id}/items: NOT found in the docs pages read; seen working on
-//   2026-10-10 (results[].item_id of the sellers on the page). Used only when
-//   the product has no buy box winner.
+// Catalog products (pages /p/MLB...). Since 2026-10 the ML API answers 403 to
+// any read of another seller's listing (/items, /items/bulk, /user-products,
+// public search), even though the docs still call /items public. Catalog
+// products are Mercado Livre's own data and stay readable:
+// - GET /products/{id}: name, family_name, pictures, attributes, short_description,
+//   domain_id (https://developers.mercadolivre.com.br/pt_br/buscador-de-produtos)
+// - GET /catalog_domains/{domain_id}/categories -> [{ id, name }]
+//   (https://developers.mercadolivre.com.br/pt_br/categorizacao-de-produtos)
+// The price is not part of a catalog product: the seller sets it.
 const productSchema = z
   .object({
-    buy_box_winner: z.object({ item_id: z.string().nullish() }).passthrough().nullish(),
+    id: z.string(),
+    name: z.string().nullish(),
+    family_name: z.string().nullish(),
+    domain_id: z.string().nullish(),
+    permalink: z.string().nullish(),
+    pictures: z
+      .array(z.object({ id: z.string().nullish(), url: z.string().nullish() }).passthrough())
+      .nullish(),
+    attributes: z
+      .array(
+        z
+          .object({
+            id: z.string(),
+            value_id: z.string().nullish(),
+            value_name: z.string().nullish(),
+          })
+          .passthrough(),
+      )
+      .nullish(),
+    short_description: z.object({ content: z.string().nullish() }).passthrough().nullish(),
   })
   .passthrough();
-const productItemsSchema = z
-  .object({ results: z.array(z.object({ item_id: z.string() }).passthrough()).default([]) })
-  .passthrough();
 
-/** Listing to copy for a catalog product id; null when it is not a catalog product. */
-export async function resolveCatalogProduct(
+const domainCategoriesSchema = z.array(
+  z.object({ id: z.string(), name: z.string().nullish() }).passthrough(),
+);
+
+/** A catalog product as a listing to copy; null when the id is not a catalog product. */
+export async function getCatalogProductForCopy(
   fetchFn: FetchFn,
   accessToken: string,
   productId: string,
-): Promise<string | null> {
-  const id = encodeURIComponent(productId);
+): Promise<ListingForCopy | null> {
   const headers = { authorization: `Bearer ${accessToken}` };
-  const product = await mlFetch(fetchFn, `${ML_API_BASE}/products/${id}`, { headers });
-  if (product.status === 404) return null;
-  if (!product.ok) await failure(product, "Catalog product");
-  const winner = productSchema.catch({}).parse(await product.json()).buy_box_winner?.item_id;
-  if (winner) return winner;
-  const items = await mlFetch(fetchFn, `${ML_API_BASE}/products/${id}/items`, { headers });
-  if (!items.ok) return null;
-  return (
-    productItemsSchema.catch({ results: [] }).parse(await items.json()).results[0]?.item_id ?? null
+  const response = await mlFetch(
+    fetchFn,
+    `${ML_API_BASE}/products/${encodeURIComponent(productId)}`,
+    { headers },
   );
+  if (response.status === 404) return null;
+  if (!response.ok) await failure(response, "Catalog product");
+  const parsed = productSchema.safeParse(await response.json());
+  if (!parsed.success) return null;
+  const product = parsed.data;
+
+  let categoryId: string | null = null;
+  let categoryName: string | null = null;
+  if (product.domain_id) {
+    const categories = await mlFetch(
+      fetchFn,
+      `${ML_API_BASE}/catalog_domains/${encodeURIComponent(product.domain_id)}/categories`,
+      { headers },
+    );
+    if (categories.ok) {
+      const first = domainCategoriesSchema.catch([]).parse(await categories.json())[0];
+      categoryId = first?.id ?? null;
+      categoryName = first?.name ?? null;
+    }
+  }
+
+  const name = product.name ?? product.id;
+  return {
+    listing: {
+      ...emptyListing(),
+      familyName: (product.family_name ?? name).replace(/\s+/g, " ").trim().slice(0, 200),
+      title: name.slice(0, 200),
+      description: product.short_description?.content ?? "",
+      categoryId,
+      categoryName,
+      // Catalog pictures go by URL (their ids belong to the catalog, not to the seller).
+      pictures: (product.pictures ?? [])
+        .filter((picture) => picture.url)
+        .map((picture) => ({ id: null, url: picture.url! }))
+        .slice(0, 12),
+      attributes: (product.attributes ?? []).map((attribute) => ({
+        id: attribute.id,
+        valueId: attribute.value_id ?? null,
+        valueName: attribute.value_name ?? null,
+      })),
+    },
+    sellerId: null,
+    listingModel: "unknown",
+    hasVariations: false,
+    permalink: product.permalink ?? null,
+    title: name,
+  };
 }

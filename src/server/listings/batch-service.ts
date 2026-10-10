@@ -127,6 +127,7 @@ type Outcome =
 const COPY_MESSAGES = {
   has_variations: "Anúncio com variações: ainda não é copiado.",
   not_found: "Anúncio não encontrado no Mercado Livre.",
+  not_readable: "Anúncio de outro vendedor: o Mercado Livre não permite ler.",
 } as const;
 
 const RECONNECT = "O Mercado Livre não aceita mais a autorização. Reconecte a conta.";
@@ -185,6 +186,7 @@ export async function runBatchRound(
           return { kind: "skipped" };
         case "has_variations":
         case "not_found":
+        case "not_readable":
           return { kind: "failed", message: COPY_MESSAGES[result.status] };
         case "account_unavailable":
           return { kind: "stop", message: "A conta de destino não está conectada." };

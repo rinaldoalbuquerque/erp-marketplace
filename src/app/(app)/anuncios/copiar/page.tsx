@@ -15,6 +15,8 @@ const ERRORS: Record<string, string> = {
   duplicate: "Esse anúncio já foi copiado.",
   has_variations: "Anúncio com variações: ainda não é copiado.",
   not_found: "Anúncio não encontrado no Mercado Livre.",
+  not_readable:
+    "O Mercado Livre não permite mais ler anúncios de outros vendedores. Use o link da página do produto no catálogo (endereço com /p/MLB…), ou crie o anúncio a partir de um SKU.",
   account_unavailable: "A conta de destino não está conectada.",
   reconnect: "A conta precisa ser reconectada em Contas de marketplace.",
   marketplace_error: "O Mercado Livre não respondeu. Tente de novo.",
@@ -47,7 +49,7 @@ async function CopyListing({ searchParams }: Pick<PageProps<"/anuncios/copiar">,
     <>
       <PageHeader
         title="Copiar anúncio"
-        description="Cole o link ou o código (MLB…) de qualquer anúncio do Mercado Livre — seu ou de outro vendedor. Ele vira um rascunho para você revisar."
+        description="Cole o link ou o código (MLB…) de um anúncio seu, ou o link de uma página de produto do catálogo do Mercado Livre (/p/MLB…). Ele vira um rascunho para você revisar."
         back={{ href: "/anuncios", label: "Anúncios" }}
       />
 
@@ -104,8 +106,9 @@ async function CopyListing({ searchParams }: Pick<PageProps<"/anuncios/copiar">,
           </button>
         </div>
         <p className="text-xs text-muted">
-          Anúncios seus já vinculados a um SKU levam o vínculo junto. Anúncios com variações ainda
-          não são copiados.
+          Anúncios seus já vinculados a um SKU levam o vínculo junto. De produtos do catálogo vêm
+          nome, fotos, ficha técnica e descrição (o preço você define). Anúncios de outros
+          vendedores não podem ser lidos (restrição do Mercado Livre).
         </p>
       </form>
     </>

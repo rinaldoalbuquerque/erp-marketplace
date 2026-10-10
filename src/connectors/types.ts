@@ -189,8 +189,8 @@ export interface MarketplaceConnector {
 
   // Copy / migrate / replicate (Phase 2D)
   getListingForCopy(accessToken: string, externalId: string): Promise<ListingForCopy>;
-  /** Listing to copy for a catalog product id (page /p/...); null when it is not one. */
-  resolveCatalogProduct(accessToken: string, productId: string): Promise<string | null>;
+  /** A catalog product (page /p/...) as a listing to copy; null when it is not one. */
+  getCatalogProductForCopy(accessToken: string, productId: string): Promise<ListingForCopy | null>;
 
   // Creating listings (Phase 2C)
   suggestCategories(accessToken: string, query: string): Promise<CategorySuggestion[]>;

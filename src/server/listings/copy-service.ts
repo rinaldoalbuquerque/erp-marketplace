@@ -45,7 +45,7 @@ export type CopyResult =
   | {
       status: "created";
       draftId: string;
-      /** The pasted id was a catalog product; this listing of it was copied. */
+      /** The pasted id was a catalog product (copied from the catalog data). */
       catalogProductId: string | null;
       copiedExternalId: string;
     }
@@ -54,6 +54,8 @@ export type CopyResult =
         | "duplicate"
         | "has_variations"
         | "not_found"
+        /** Another seller's listing: the marketplace does not allow reading it */
+        | "not_readable"
         | "account_unavailable"
         | "reconnect"
         | "marketplace_error";
@@ -102,22 +104,21 @@ export async function copyToDraft(
       own?.marketplaceAccountId ?? target.id,
       deps,
     );
-    // Not a listing? It may be a catalog product (page /p/MLB...): copy one of its listings.
-    let sourceExternalId = input.sourceExternalId;
+    // Listings of other sellers can no longer be read (ML answers 403). A catalog
+    // product (page /p/MLB...) can: its name, pictures, sheet and description.
+    const sourceExternalId = input.sourceExternalId;
     let catalogProductId: string | null = null;
     let source;
     try {
       source = await connector.getListingForCopy(readToken, sourceExternalId);
     } catch (error) {
-      const notFound =
+      const unreadable =
         error instanceof MarketplaceValidationError ||
-        (error instanceof MarketplaceApiError && error.status === 404);
-      if (!notFound) throw error;
-      const listingOfProduct = await connector.resolveCatalogProduct(readToken, sourceExternalId);
-      if (!listingOfProduct) return { status: "not_found" };
+        (error instanceof MarketplaceApiError && (error.status === 403 || error.status === 404));
+      if (!unreadable) throw error;
+      source = await connector.getCatalogProductForCopy(readToken, sourceExternalId);
+      if (!source) return { status: own ? "not_found" : "not_readable" };
       catalogProductId = sourceExternalId;
-      sourceExternalId = listingOfProduct;
-      source = await connector.getListingForCopy(readToken, sourceExternalId);
     }
     if (source.hasVariations) return { status: "has_variations" };
 

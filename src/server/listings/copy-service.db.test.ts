@@ -216,33 +216,32 @@ describe("copy listings against the database", () => {
         { sourceExternalId: "MLB1234567", targetAccountId },
         { key, connectorFor: () => missing },
       ),
-    ).toEqual({ status: "not_found" });
+      // Another seller's listing: ML no longer tells "missing" from "forbidden".
+    ).toEqual({ status: "not_readable" });
   });
 
-  it("a catalog product id copies one of its listings", async () => {
-    const reads: string[] = [];
+  it("another seller's listing is unreadable; a catalog product id is copied from the catalog", async () => {
+    const forbidden = () => {
+      throw new MarketplaceValidationError(["Access to the requested resource is forbidden"]);
+    };
     const catalog = fakeConnector({
-      getListingForCopy: async (_token, id) => {
-        reads.push(id);
-        if (id === "MLB39565808") throw new MarketplaceValidationError(["Item not found"]);
-        return source();
-      },
-      resolveCatalogProduct: async () => "MLB5429219232",
+      getListingForCopy: async () => forbidden(),
+      getCatalogProductForCopy: async (_token, id) =>
+        id === "MLB39565808" ? source({ sellerId: null }) : null,
     });
+    const deps = { key, connectorFor: () => catalog };
+    expect(
+      await copyToDraft(ctx(), { sourceExternalId: "MLB5354765828", targetAccountId }, deps),
+    ).toEqual({ status: "not_readable" });
     const result = await copyToDraft(
       ctx(),
       { sourceExternalId: "MLB39565808", targetAccountId },
-      { key, connectorFor: () => catalog },
+      deps,
     );
-    expect(result).toMatchObject({
-      status: "created",
-      catalogProductId: "MLB39565808",
-      copiedExternalId: "MLB5429219232",
-    });
-    expect(reads).toEqual(["MLB39565808", "MLB5429219232"]);
+    expect(result).toMatchObject({ status: "created", catalogProductId: "MLB39565808" });
     const row = await db.listingDraft.findUniqueOrThrow({
       where: { id: result.status === "created" ? result.draftId : "" },
     });
-    expect(row.sourceExternalId).toBe("MLB5429219232");
+    expect(row).toMatchObject({ sourceKind: "external", sourceExternalId: "MLB39565808" });
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { getListingForCopy, resolveCatalogProduct } from "@/connectors/mercadolivre/copying";
+import { getCatalogProductForCopy, getListingForCopy } from "@/connectors/mercadolivre/copying";
 import type { FetchFn } from "@/connectors/mercadolivre/http";
 import { toPublishBody } from "@/connectors/mercadolivre/publishing";
 
@@ -95,27 +95,52 @@ describe("getListingForCopy", () => {
   });
 });
 
-describe("resolveCatalogProduct", () => {
-  it("uses the buy box winner of a catalog product", async () => {
-    const fetchFn = fakeFetch(() => ({
-      status: 200,
-      body: { id: "MLB39565808", buy_box_winner: { item_id: "MLB111" } },
-    }));
-    expect(await resolveCatalogProduct(fetchFn, "t", "MLB39565808")).toBe("MLB111");
-    expect(new URL(String(fetchFn.mock.calls[0]?.[0])).pathname).toBe("/products/MLB39565808");
-  });
+describe("getCatalogProductForCopy", () => {
+  // Fields seen on GET /products/MLB39565808 (2026-10-10).
+  const product = {
+    id: "MLB39565808",
+    name: "Escorredor Bancada Pia Compacto Louças Talheres Pratos Preto",
+    family_name: "Escorredor de louça EVRODU Escorredor Compacto Preto",
+    domain_id: "MLB-DISHES_RACKS",
+    pictures: [
+      {
+        id: "789094-MLA100058497347_122025",
+        url: "https://http2.mlstatic.com/D_NQ_NP_789094-MLA100058497347_122025-F.jpg",
+      },
+    ],
+    attributes: [{ id: "BRAND", name: "Marca", value_id: "32132876", value_name: "EVRODU" }],
+    short_description: { type: "plaintext", content: "Escorredor de pia compacto." },
+  };
 
-  it("without a winner, takes the first listing of the product", async () => {
+  it("builds a draft from the catalog: name, pictures by URL, sheet, description, category", async () => {
     const fetchFn = fakeFetch((url) =>
-      url.pathname.endsWith("/items")
-        ? { status: 200, body: { results: [{ item_id: "MLB5429219232" }], paging: { total: 5 } } }
-        : { status: 200, body: { id: "MLB39565808", buy_box_winner: null } },
+      url.pathname.startsWith("/catalog_domains/")
+        ? { status: 200, body: [{ id: "MLB194034", name: "Escorredores" }] }
+        : { status: 200, body: product },
     );
-    expect(await resolveCatalogProduct(fetchFn, "t", "MLB39565808")).toBe("MLB5429219232");
+    const copy = await getCatalogProductForCopy(fetchFn, "t", "MLB39565808");
+    expect(copy?.listing).toMatchObject({
+      familyName: "Escorredor de louça EVRODU Escorredor Compacto Preto",
+      title: "Escorredor Bancada Pia Compacto Louças Talheres Pratos Preto",
+      description: "Escorredor de pia compacto.",
+      categoryId: "MLB194034",
+      categoryName: "Escorredores",
+      priceCents: null,
+      pictures: [
+        {
+          id: null,
+          url: "https://http2.mlstatic.com/D_NQ_NP_789094-MLA100058497347_122025-F.jpg",
+        },
+      ],
+      attributes: [{ id: "BRAND", valueId: "32132876", valueName: "EVRODU" }],
+    });
+    expect(new URL(String(fetchFn.mock.calls[1]?.[0])).pathname).toBe(
+      "/catalog_domains/MLB-DISHES_RACKS/categories",
+    );
   });
 
   it("not a catalog product -> null", async () => {
     const fetchFn = fakeFetch(() => ({ status: 404, body: { error: "not_found" } }));
-    expect(await resolveCatalogProduct(fetchFn, "t", "MLB1")).toBeNull();
+    expect(await getCatalogProductForCopy(fetchFn, "t", "MLB1")).toBeNull();
   });
 });

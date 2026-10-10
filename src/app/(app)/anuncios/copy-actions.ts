@@ -106,7 +106,7 @@ export async function copyOneAction(formData: FormData) {
   }
   redirect(
     result.catalogProductId
-      ? `/anuncios/rascunhos/${result.draftId}?catalogo=${result.catalogProductId}&anuncio=${result.copiedExternalId}`
+      ? `/anuncios/rascunhos/${result.draftId}?catalogo=${result.catalogProductId}`
       : `/anuncios/rascunhos/${result.draftId}`,
   );
 }

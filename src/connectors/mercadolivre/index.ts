@@ -15,7 +15,7 @@ import {
   type MercadoLivreAppConfig,
 } from "./oauth";
 import { getOrder, searchOrdersUpdated } from "./orders";
-import { getListingForCopy, resolveCatalogProduct } from "./copying";
+import { getCatalogProductForCopy, getListingForCopy } from "./copying";
 import {
   publishListing,
   quoteFees,
@@ -60,8 +60,8 @@ export function createMercadoLivreConnector(
       getShippingLabels(fetchFn, accessToken, ids, format),
     getListingForCopy: (accessToken, externalId) =>
       getListingForCopy(fetchFn, accessToken, externalId),
-    resolveCatalogProduct: (accessToken, productId) =>
-      resolveCatalogProduct(fetchFn, accessToken, productId),
+    getCatalogProductForCopy: (accessToken, productId) =>
+      getCatalogProductForCopy(fetchFn, accessToken, productId),
     suggestCategories: (accessToken, query) => suggestCategories(fetchFn, accessToken, query),
     uploadPicture: (accessToken, file, filename) =>
       uploadPicture(fetchFn, accessToken, file, filename),

@@ -43,8 +43,6 @@ async function Draft({
   const query = await searchParams;
   const catalog =
     typeof query.catalogo === "string" && CODE.test(query.catalogo) ? query.catalogo : null;
-  const copied =
-    typeof query.anuncio === "string" && CODE.test(query.anuncio) ? query.anuncio : null;
   if (!z.uuid().safeParse(id).success) notFound();
   const draft = await loadDraft(tdb, id);
   if (!draft) notFound();
@@ -106,13 +104,14 @@ async function Draft({
           ) : null}
         </p>
       ) : null}
-      {catalog && copied ? (
+      {catalog ? (
         <p
           role="status"
           className="mb-5 rounded-lg border-l-4 border-success bg-success-soft px-3 py-2 text-sm text-success"
         >
-          {catalog} é um produto de catálogo (página com vários vendedores), não um anúncio. Foi
-          copiado o anúncio {copied}, de um dos vendedores dessa página.
+          Rascunho criado a partir do produto {catalog} do catálogo do Mercado Livre: nome, fotos,
+          ficha técnica e descrição vieram do catálogo. Defina o preço e confira a categoria antes
+          de publicar.
         </p>
       ) : null}
       {draft.sourceKind === "external" && draft.editable ? (

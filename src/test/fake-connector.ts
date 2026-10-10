@@ -25,7 +25,7 @@ export function fakeConnector(overrides: Partial<MarketplaceConnector> = {}): Ma
     getShipmentSla: notUsed("getShipmentSla"),
     getShippingLabels: notUsed("getShippingLabels"),
     getListingForCopy: notUsed("getListingForCopy"),
-    resolveCatalogProduct: async () => null,
+    getCatalogProductForCopy: async () => null,
     suggestCategories: notUsed("suggestCategories"),
     uploadPicture: notUsed("uploadPicture"),
     quoteFees: notUsed("quoteFees"),
