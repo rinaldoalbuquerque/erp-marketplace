@@ -252,6 +252,12 @@ export interface MarketplaceConnector {
   getCategoryAttributes(accessToken: string, categoryId: string): Promise<AttributeDefinition[]>;
   /** Fresh copy of one listing for editing (incl. attribute values and description). */
   getListingForEdit(accessToken: string, externalId: string): Promise<EditableListing>;
+  /** Closes (unless already closed) and deletes a listing on the marketplace. Irreversible. */
+  deleteListing(
+    accessToken: string,
+    externalId: string,
+    options: { alreadyClosed: boolean },
+  ): Promise<void>;
   /** Sends only the fields present in `patch`. Warnings = parts the marketplace ignored. */
   updateListing(
     accessToken: string,

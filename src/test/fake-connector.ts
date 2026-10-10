@@ -36,6 +36,7 @@ export function fakeConnector(overrides: Partial<MarketplaceConnector> = {}): Ma
     getListingForEdit: notUsed("getListingForEdit"),
     updateListing: notUsed("updateListing"),
     updateListingDescription: notUsed("updateListingDescription"),
+    deleteListing: notUsed("deleteListing"),
     ...overrides,
   };
 }

@@ -10,6 +10,7 @@ import type { Prisma } from "@/generated/prisma/client";
 
 import { applyBulkItem } from "./bulk-edit-service";
 import { copyToDraft, type CopyDeps } from "./copy-service";
+import { deleteListingItem } from "./delete-listings-service";
 import { publishDraft } from "./draft-service";
 import { STALE_AFTER_MS } from "./import-service";
 
@@ -21,17 +22,16 @@ import { STALE_AFTER_MS } from "./import-service";
 // - replicate_listings: pendingIds = source listing ids -> drafts of the account.
 //   Idempotent: one draft per source per batch (unique index).
 // - publish_drafts: pendingIds = draft ids -> publishDraft (each draft once).
+// - delete_listings: pendingIds = listing ids -> closed + deleted on the marketplace.
 // Report: createdCount = done, updatedCount = skipped (already done),
 // failedCount + errors = refused / not copied, with the reason.
 
 export type ReplicateParams = { price: PriceOptions | null; listingTypeId: ListingTypeId | null };
 
 const MAX_ITEMS = 500;
-const BATCH_TYPES: Array<"replicate_listings" | "publish_drafts" | "bulk_edit_listings"> = [
-  "replicate_listings",
-  "publish_drafts",
-  "bulk_edit_listings",
-];
+const BATCH_TYPES: Array<
+  "replicate_listings" | "publish_drafts" | "bulk_edit_listings" | "delete_listings"
+> = ["replicate_listings", "publish_drafts", "bulk_edit_listings", "delete_listings"];
 const MAX_REPORTED_ERRORS = 100;
 
 export type StartResult =
@@ -168,6 +168,7 @@ export async function runBatchRound(
 
   async function process(id: string): Promise<Outcome> {
     if (job!.type === "bulk_edit_listings") return applyBulkItem(ctx, jobId, id, deps);
+    if (job!.type === "delete_listings") return deleteListingItem(ctx, id, deps);
     if (job!.type === "replicate_listings") {
       const result = await copyToDraft(
         ctx,

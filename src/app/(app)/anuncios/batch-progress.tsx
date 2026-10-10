@@ -16,12 +16,14 @@ const TITLES = {
   replicate_listings: "Cópia em lote",
   publish_drafts: "Publicação em lote",
   bulk_edit_listings: "Edição em massa",
+  delete_listings: "Exclusão no Mercado Livre",
 } as const;
 
 const DONE_LABEL = {
   replicate_listings: "copiados",
   publish_drafts: "publicados",
   bulk_edit_listings: "alterados",
+  delete_listings: "excluídos",
 } as const;
 
 /** Live progress and final report of a replicate/publish batch. */

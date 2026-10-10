@@ -399,6 +399,8 @@ enum SyncJobType {
   publish_drafts
   /// Change price or status of many listings (bulk edit)
   bulk_edit_listings
+  /// Close and delete listings on the marketplace (then removed from the ERP)
+  delete_listings
 
   @@map("sync_job_type")
 }
