@@ -106,7 +106,7 @@ beforeAll(async () => {
       data: {
         organizationId,
         productId,
-        code: `TESTE-${randomUUID().slice(0, 8)}`,
+        code: `TESTE-${randomUUID().slice(0, 8)}`.toUpperCase(),
         ean: "7891234567895",
         stockOnHand: 5,
       },
@@ -312,5 +312,64 @@ describe("listing drafts against the database", () => {
       select: { mappings: { select: { skuId: true } } },
     });
     expect(blue.mappings.map((mapping) => mapping.skuId)).toEqual([skuId]);
+  });
+
+  it("typed SKU codes: existing ones are linked, new ones are created in the ERP", async () => {
+    const draftId = await readyDraft();
+    const draft = await loadDraft(ctx().tdb, draftId);
+    const existing = await db.sku.findUniqueOrThrow({ where: { id: skuId } });
+    const newCode = `NOVO-${randomUUID().slice(0, 6)}`.toUpperCase();
+    await saveDraftContent(ctx().tdb, draftId, {
+      ...draft!.listing,
+      variationAttributeIds: ["COLOR"],
+      variants: [
+        {
+          ...emptyVariant("a"),
+          attributes: [{ id: "COLOR", valueId: null, valueName: "Azul" }],
+          skuCode: existing.code.toLowerCase(), // typed in lower case: still the same SKU
+        },
+        {
+          ...emptyVariant("b"),
+          attributes: [{ id: "COLOR", valueId: null, valueName: "Verde" }],
+          skuCode: newCode,
+          gtin: "7891000100103",
+          package: { weightG: 500, heightCm: 10, widthCm: 20, lengthCm: 30 },
+        },
+      ],
+    });
+    const connector = fakeConnector({
+      publishListing: async () => created(`MLB${Date.now()}${Math.random()}`.slice(0, 18)),
+      updateListingDescription: async () => undefined,
+    });
+    const result = await publishDraft(ctx(), draftId, { key, connectorFor: () => connector });
+    expect(result.status).toBe("published");
+    const createdSku = await db.sku.findFirstOrThrow({
+      where: { organizationId, code: newCode },
+    });
+    expect(createdSku).toMatchObject({
+      ean: "7891000100103",
+      weightGrams: 500,
+      heightCm: 10,
+      widthCm: 20,
+      lengthCm: 30,
+      productId: existing.productId, // same product as the draft's SKU
+      variation: [{ name: "Cor", value: "Verde" }],
+    });
+    const saved = await loadDraft(ctx().tdb, draftId);
+    expect(saved?.listing.variants.map((variant) => variant.skuId)).toEqual([skuId, createdSku.id]);
+  });
+
+  it("a typed SKU that does not exist is refused when the profile cannot create products", async () => {
+    const draftId = await readyDraft();
+    const draft = await loadDraft(ctx().tdb, draftId);
+    await saveDraftContent(ctx().tdb, draftId, { ...draft!.listing, skuCode: "NAO-EXISTE-123" });
+    const result = await publishDraft(
+      ctx(),
+      draftId,
+      { key, connectorFor: () => fakeConnector() },
+      { canCreateSkus: false },
+    );
+    expect(result).toMatchObject({ status: "incomplete" });
+    expect(await db.sku.count({ where: { organizationId, code: "NAO-EXISTE-123" } })).toBe(0);
   });
 });

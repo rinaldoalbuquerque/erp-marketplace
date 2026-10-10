@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { CategorySuggestion, FeeQuote } from "@/connectors/types";
 import type { AttributeDefinition } from "@/domain/listings/attributes";
 import type { CanonicalListing } from "@/domain/listings/canonical";
+import { can } from "@/domain/auth/permissions";
 import { requirePermission } from "@/server/auth/session";
 import {
   addDraftPicture,
@@ -16,6 +17,7 @@ import {
   publishDraft,
   quoteDraftFees,
   saveDraftContent,
+  saveDraftMeta,
   setDraftSku,
   uploadVariantPicture,
   suggestDraftCategories,
@@ -120,7 +122,14 @@ export async function publishDraftAction(draftId: string): Promise<PublishResult
   const { member, ctx } = await context();
   if (!id.safeParse(draftId).success) return { status: "not_found" };
   try {
-    const result = await publishDraft(ctx, draftId);
+    const result = await publishDraft(
+      ctx,
+      draftId,
+      {},
+      {
+        canCreateSkus: can(member.role, "products.edit"),
+      },
+    );
     if (
       (result.status === "published" || result.status === "partial") &&
       result.listingIds.length
@@ -163,4 +172,26 @@ export async function uploadVariantPictureAction(draftId: string, formData: Form
     return { status: "invalid" } as const;
   }
   return uploadVariantPicture(ctx, draftId, file, file instanceof File ? file.name : "foto.jpg");
+}
+
+/** Supplier link (internal) and target account of the draft. */
+export async function saveDraftMetaAction(
+  draftId: string,
+  meta: { supplierUrl: string; accountId: string },
+): Promise<"saved" | "locked" | "account_unavailable" | "invalid"> {
+  const { ctx } = await context();
+  const url = meta.supplierUrl.trim();
+  if (
+    !id.safeParse(draftId).success ||
+    !id.safeParse(meta.accountId).success ||
+    (url && !z.url().max(1000).safeParse(url).success)
+  ) {
+    return "invalid";
+  }
+  const result = await saveDraftMeta(ctx.tdb, draftId, {
+    supplierUrl: url || null,
+    accountId: meta.accountId,
+  });
+  revalidatePath(`/anuncios/rascunhos/${draftId}`);
+  return result;
 }

@@ -246,6 +246,7 @@ export function DraftEditor({
       attributes,
       warranty: { type: warrantyType.trim() || null, time: warrantyTime.trim() || null },
       package: initial.package,
+      skuCode: initial.skuCode,
       variationAttributeIds: kind === "variants" ? variationIds : [],
       variants: kind === "variants" ? variants : [],
     };

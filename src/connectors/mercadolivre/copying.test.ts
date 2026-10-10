@@ -7,6 +7,7 @@ import {
 } from "@/connectors/mercadolivre/copying";
 import type { FetchFn } from "@/connectors/mercadolivre/http";
 import { toPublishBody } from "@/connectors/mercadolivre/publishing";
+import { emptyListing } from "@/domain/listings/canonical";
 
 function fakeFetch(handler: (url: URL) => { status: number; body: unknown }) {
   const fn = vi.fn(async (input: string | URL | Request) => {
@@ -74,24 +75,16 @@ describe("getListingForCopy", () => {
   it("a picture without id is published by its URL (source)", () => {
     const body = toPublishBody(
       {
+        ...emptyListing(),
         familyName: "Pote",
         title: "Pote",
-        description: "",
         categoryId: "MLB1234",
-        categoryName: null,
-        condition: "new",
-        listingTypeId: "gold_special",
         priceCents: 1000,
         availableQuantity: 1,
         pictures: [
           { id: null, url: "https://http2.mlstatic.com/D_111-O.jpg" },
           { id: "333-MLB1_01", url: null },
         ],
-        attributes: [],
-        warranty: { type: null, time: null },
-        package: { weightG: null, heightCm: null, widthCm: null, lengthCm: null },
-        variationAttributeIds: [],
-        variants: [],
       },
       "user_products",
     );

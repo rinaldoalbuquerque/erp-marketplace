@@ -105,6 +105,8 @@ export const canonicalListingSchema = z.object({
   attributes: z.array(attributeValueSchema).max(300),
   warranty: warrantySchema,
   package: packageSchema.default(EMPTY_PACKAGE),
+  /** Simple listing: SKU code typed on the form (created in the ERP when publishing if new). */
+  skuCode: z.string().trim().max(60).nullable().default(null),
   /** Attributes that vary among the variants (e.g. COLOR, SIZE). Empty = simple listing. */
   variationAttributeIds: z.array(z.string().min(1).max(100)).max(5).default([]),
   variants: z.array(variantSchema).max(100).default([]),
@@ -127,6 +129,7 @@ export function emptyListing(): CanonicalListing {
     attributes: [],
     warranty: { type: null, time: null },
     package: { ...EMPTY_PACKAGE },
+    skuCode: null,
     variationAttributeIds: [],
     variants: [],
   };

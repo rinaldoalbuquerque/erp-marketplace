@@ -21,6 +21,8 @@ import {
   variantLabel,
   variantListing,
 } from "@/domain/listings/canonical";
+import { isValidGtin } from "@/domain/products/gtin";
+import { normalizeSkuCode } from "@/domain/products/schemas";
 import { getConnector } from "@/server/marketplaces/config";
 import {
   getAccessToken,
@@ -134,9 +136,11 @@ export async function loadDraft(tdb: TenantDb, draftId: string) {
           status: true,
         },
       },
+      supplierUrl: true,
       sku: {
         select: {
           id: true,
+          productId: true,
           code: true,
           costCents: true,
           stockOnHand: true,
@@ -418,6 +422,7 @@ export async function publishDraft(
   ctx: Ctx,
   draftId: string,
   deps: DraftDeps = {},
+  options: { canCreateSkus?: boolean } = {},
 ): Promise<PublishResult> {
   const market = await marketplaceFor(ctx, draftId, deps);
   if (market.status !== "ok") return market;
@@ -425,6 +430,9 @@ export async function publishDraft(
   if (!draft.account.allowWrites) return { status: "writes_disabled" };
   if (!draft.editable) return { status: "locked" };
   const missing = missingForPublish(draft.listing, draft.model);
+  for (const code of invalidSkuCodes(draft.listing)) {
+    missing.push(`SKU ${code}: use letras, números e - _ . / (sem espaços nem acentos)`);
+  }
   if (missing.length) return { status: "incomplete", missing };
 
   // Claim: only one publish per draft, even with two clicks.
@@ -434,8 +442,22 @@ export async function publishDraft(
   });
   if (claimed.count !== 1) return { status: "locked" };
 
+  // SKU codes typed on the form -> ERP SKUs (created when new), saved with the draft.
+  const typed = await resolveTypedSkus(ctx, draft, options.canCreateSkus ?? true);
+  if (typed.errors.length) {
+    await ctx.tdb.listingDraft.updateMany({
+      where: { id: draftId, status: "publishing" },
+      data: { status: "failed", lastErrors: typed.errors },
+    });
+    return { status: "incomplete", missing: typed.errors };
+  }
+  await ctx.tdb.listingDraft.updateMany({
+    where: { id: draftId },
+    data: { content: json(typed.listing), skuId: typed.draftSkuId },
+  });
+
   const published: PublishedMap = { ...(draft.publishedVariants as PublishedMap) };
-  const units = unitsOf(draft.listing, draft.sku?.id ?? null);
+  const units = unitsOf(typed.listing, typed.draftSkuId);
   const outcomes: VariantOutcome[] = [];
   let descriptionFailed = false;
   let stopped = false;
@@ -688,4 +710,171 @@ export async function uploadVariantPicture(
     if (error instanceof MarketplaceValidationError) return { status: "invalid" };
     return failureOf(error);
   }
+}
+
+// ---- SKUs typed on the listing form (created in the ERP when new) ----
+
+const SKU_CODE = /^[A-Z0-9][A-Z0-9._\-/]*$/;
+
+/** Friendly names for the variation of an auto-created SKU (else the attribute id). */
+const VARIATION_NAMES: Record<string, string> = {
+  COLOR: "Cor",
+  SIZE: "Tamanho",
+  VOLTAGE: "Voltagem",
+  CAPACITY: "Capacidade",
+  FLAVOR: "Sabor",
+};
+
+type SkuPlan = {
+  code: string;
+  gtin: string | null;
+  pkg: CanonicalListing["package"];
+  variation: Array<{ name: string; value: string }>;
+};
+
+/** Codes typed on the form that are invalid (checked before publishing). */
+export function invalidSkuCodes(listing: CanonicalListing): string[] {
+  const codes = [listing.skuCode, ...listing.variants.map((variant) => variant.skuCode)]
+    .filter((code): code is string => Boolean(code && code.trim()))
+    .map(normalizeSkuCode);
+  return codes.filter((code) => !SKU_CODE.test(code));
+}
+
+/**
+ * Links each typed SKU code to an ERP SKU, creating it (in the product of the
+ * draft, or a new product named after the family) when it does not exist.
+ * Returns the listing with skuIds filled and the SKU of a simple listing.
+ */
+async function resolveTypedSkus(
+  ctx: Ctx,
+  draft: NonNullable<Awaited<ReturnType<typeof loadDraft>>>,
+  canCreate: boolean,
+): Promise<{ listing: CanonicalListing; draftSkuId: string | null; errors: string[] }> {
+  const listing: CanonicalListing = {
+    ...draft.listing,
+    variants: draft.listing.variants.map((variant) => ({ ...variant })),
+  };
+  const errors: string[] = [];
+  let productId: string | null = draft.sku?.productId ?? null;
+  if (!productId) {
+    const linked = listing.variants
+      .map((variant) => variant.skuId)
+      .filter((id): id is string => Boolean(id));
+    if (linked.length) {
+      const sku = await ctx.tdb.sku.findFirst({
+        where: { id: { in: linked } },
+        select: { productId: true },
+      });
+      productId = sku?.productId ?? null;
+    }
+  }
+
+  async function ensure(plan: SkuPlan): Promise<string | null> {
+    const existing = await ctx.tdb.sku.findFirst({
+      where: { code: plan.code },
+      select: { id: true },
+    });
+    if (existing) return existing.id;
+    if (!canCreate) {
+      errors.push(`SKU ${plan.code} não existe no ERP e seu perfil não pode criar produtos.`);
+      return null;
+    }
+    if (!productId) {
+      const brand = listing.attributes.find((attribute) => attribute.id === "BRAND")?.valueName;
+      const product = await ctx.tdb.product.create({
+        data: {
+          organizationId: ctx.organizationId,
+          name: (listing.familyName || listing.title || plan.code).slice(0, 200),
+          brand: brand ?? null,
+        },
+        select: { id: true },
+      });
+      productId = product.id;
+    }
+    // EAN is unique in the ERP: when another SKU already has it, create without it.
+    const ean = plan.gtin && isValidGtin(plan.gtin) ? plan.gtin : null;
+    const eanTaken = ean
+      ? Boolean(await ctx.tdb.sku.findFirst({ where: { ean }, select: { id: true } }))
+      : false;
+    const sku = await ctx.tdb.sku.create({
+      data: {
+        organizationId: ctx.organizationId,
+        productId,
+        code: plan.code,
+        ean: eanTaken ? null : ean,
+        variation: plan.variation.length ? plan.variation : undefined,
+        weightGrams: plan.pkg.weightG,
+        heightCm: plan.pkg.heightCm,
+        widthCm: plan.pkg.widthCm,
+        lengthCm: plan.pkg.lengthCm,
+      },
+      select: { id: true },
+    });
+    return sku.id;
+  }
+
+  let draftSkuId = draft.sku?.id ?? null;
+  if (listing.variants.length === 0) {
+    const code = listing.skuCode ? normalizeSkuCode(listing.skuCode) : null;
+    if (code && code !== draft.sku?.code) {
+      const gtin = listing.attributes.find((attribute) => attribute.id === "GTIN")?.valueName;
+      draftSkuId =
+        (await ensure({ code, gtin: gtin ?? null, pkg: listing.package, variation: [] })) ??
+        draftSkuId;
+    }
+  } else {
+    for (const variant of listing.variants) {
+      if (!variant.skuCode?.trim()) continue;
+      const code = normalizeSkuCode(variant.skuCode);
+      const current = variant.skuId
+        ? await ctx.tdb.sku.findFirst({ where: { id: variant.skuId }, select: { code: true } })
+        : null;
+      if (current?.code === code) continue;
+      variant.skuId =
+        (await ensure({
+          code,
+          gtin: variant.gtin,
+          pkg: variantListing(listing, variant).package,
+          variation: variant.attributes
+            .filter((attribute) => attribute.valueName)
+            .map((attribute) => ({
+              name: VARIATION_NAMES[attribute.id] ?? attribute.id,
+              value: attribute.valueName!,
+            })),
+        })) ?? variant.skuId;
+    }
+  }
+  return { listing, draftSkuId, errors };
+}
+
+/** Supplier link (internal note) and target account of an editable draft. */
+export async function saveDraftMeta(
+  tdb: TenantDb,
+  draftId: string,
+  meta: { supplierUrl: string | null; accountId: string },
+): Promise<"saved" | "locked" | "account_unavailable"> {
+  const draft = await tdb.listingDraft.findFirst({
+    where: { id: draftId },
+    select: { status: true, publishedVariants: true, marketplaceAccountId: true },
+  });
+  if (!draft || !(EDITABLE as readonly string[]).includes(draft.status)) return "locked";
+  const anyPublished = Object.keys((draft.publishedVariants ?? {}) as object).length > 0;
+  const accountChanged = meta.accountId !== draft.marketplaceAccountId;
+  if (accountChanged) {
+    if (anyPublished) return "locked";
+    const account = await tdb.marketplaceAccount.findFirst({
+      where: { id: meta.accountId, status: "active" },
+      select: { id: true },
+    });
+    if (!account) return "account_unavailable";
+  }
+  await tdb.listingDraft.updateMany({
+    where: { id: draftId, status: { in: [...EDITABLE] } },
+    data: {
+      supplierUrl: meta.supplierUrl,
+      marketplaceAccountId: meta.accountId,
+      ...(accountChanged ? { status: "draft" as const } : {}),
+    },
+  });
+  return "saved";
 }
